@@ -1,14 +1,15 @@
 import types
 from copy import copy
 import numpy as np
+import jax.numpy as jnp
 
 
 def placeholder_occupation(self, **kwargs):
     """This will overwrite the occupation models to populate placeholders"""
     mean_occ = self.mean_occupation(**kwargs)
 
-    ans = np.ceil(mean_occ / self.max_prob).astype(int)
-    return np.where(mean_occ > self.min_prob, ans, 0)
+    occupation = jnp.ceil(mean_occ / self.max_prob).astype(int)
+    return jnp.where(mean_occ > self.min_prob, occupation, 0)
 
 
 # noinspection PyProtectedMember
@@ -19,14 +20,14 @@ def make_placeholder_model(galtab):
     max_weight_dict = galtab.max_weight_dict
 
     # Access the occupation component models
-    occupation_model_names = [x for x in model._input_model_dictionary
+    occupation_model_names = [x for x in ph_model._input_model_dictionary
                               if x.endswith("_occupation")]
-    occupation_models = [model._input_model_dictionary[x]
+    occupation_models = [ph_model._input_model_dictionary[x]
                          for x in occupation_model_names]
     copied_models = [copy(x) for x in occupation_models]
 
     # Hack the occupation models to make them do what we want
-    # before returning them to their original state :)
+    # before returning them to their original state
     try:
         for name, occ_model in zip(occupation_model_names, occupation_models):
             gal_type = occ_model.gal_type
@@ -46,9 +47,9 @@ def make_placeholder_model(galtab):
                                                        occ_model)
             setattr(ph_model, method_name, occ_model.mc_occupation)
 
-        kwargs = {"Num_ptcl_requirement": galtab.num_ptcl_requirement}
-        if galtab.num_ptcl_requirement is None:
-            kwargs = {}
+        kwargs = {}
+        if galtab.num_ptcl_requirement is not None:
+            kwargs["Num_ptcl_requirement"] = galtab.num_ptcl_requirement
         ph_model.populate_mock(galtab.halocat, **kwargs)
         galaxies = ph_model.mock.galaxy_table
     finally:
@@ -62,7 +63,7 @@ def make_placeholder_model(galtab):
             assert not hasattr(copied_model, "min_prob")
             assert not hasattr(copied_model, "max_prob")
 
-    galaxies.add_column(np.empty(len(galaxies), dtype=float), name="weights")
+    galaxies.add_column(jnp.empty(len(galaxies), dtype=float), name="weights")
     return galaxies, ph_model
 
 
@@ -71,7 +72,7 @@ def calc_weights(galaxies, model, inplace=False):
     if inplace:
         weights = galaxies["weights"]
     else:
-        weights = np.empty_like(galaxies["weights"])
+        weights = jnp.empty_like(galaxies["weights"])
 
     # Access the occupation component models
     names = [x for x in model._input_model_dictionary

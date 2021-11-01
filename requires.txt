@@ -1,0 +1,4 @@
+Cython
+numpy
+jax
+halotools>=0.7
