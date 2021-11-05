@@ -1,27 +1,25 @@
 import numpy as np
-import scipy.stats
+import jax.scipy
 import jax.numpy as jnp
 
-# import halotools.empirical_models as htem
 import halotools.mock_observables as htmo
-# import halotools.simulation_manager as htsm
 
 from . import galaxy_tabulator as gt
+from . import cdf_interp
 
 
 class GalaxyTabulator:
     """
-    This should be the only class a casual user needs to use.
-
-    It is responsible for populating place holder galaxies which will be given a
-    `probability_weight` variable according to the probability that
-    it would exist in its given halo
+    This object populates placeholder galaxies according to a fiducial halo
+    occupation model. Then, given any occupation model, each placeholder which
+    will be assigned a "weight" according to the mean occupation of
     """
 
     def __init__(self, halocat, fiducial_model,
                  min_weight_dict=None,
                  max_weight_dict=None,
-                 num_ptcl_requirement=None):
+                 num_ptcl_requirement=None,
+                 seed=None):
         """
         Parameters
         ----------
@@ -39,6 +37,8 @@ class GalaxyTabulator:
             placeholder(s) - default is 1 for centrals and 0.25 for satellites
         num_ptcl_requirement : Optional[int]
             Passed to model.populate_mock()
+        seed : Optional[int]
+            Passed to model.populate_mock()
 
         Examples
         --------
@@ -49,16 +49,17 @@ class GalaxyTabulator:
         self.min_weight_dict = {} if min_weight_dict is None else min_weight_dict
         self.max_weight_dict = {} if max_weight_dict is None else max_weight_dict
         self.num_ptcl_requirement = num_ptcl_requirement
+        self.seed = seed
         self.predictor = None
 
         self.galaxies, self._placeholder_model = self.populate_placeholders()
-        self.calc_weights(self._placeholder_model, inplace=True)
+        # self.calc_weights(self._placeholder_model, inplace=True)
 
     def populate_placeholders(self):
         return gt.make_placeholder_model(self)
 
-    def calc_weights(self, model, inplace=False):
-        return gt.calc_weights(self.galaxies, model, inplace=inplace)
+    def calc_weights(self, model):
+        return gt.calc_weights(self.galaxies, model)
 
     def tabulate_cic(self, **kwargs):
         self.predictor = CICTabulator(self, **kwargs)
@@ -75,6 +76,26 @@ class CICTabulator:
     def __init__(self, galtab, bin_edges,
                  sample1_selector=None, sample2_selector=None,
                  **kwargs):
+        """
+        Initialize a CICTabulator
+
+        This object tabulates the cylinder counts of each placeholder galaxy to
+        quickly, deterministically, and differentiably predict dP(N_CIC)/dN_CIC
+        for any given occupation model.
+
+        Parameters
+        ----------
+        galtab : GalaxyTabulator
+        bin_edges : np.ndarray
+        sample1_selector : Optional[callable]
+        sample2_selector : Optional[callable]
+
+        Note: Remaining keyword arguments are passed to halotools' counts-in-
+        cylinders function. There are two mandatory keyword arguments for this.
+
+        proj_search_radius : float
+        cylinder_half_length : float
+        """
         self.galtab = galtab
         self.bin_edges = bin_edges
         self.sample1_selector = sample1_selector
@@ -115,7 +136,7 @@ class CICTabulator:
 
     def predict(self, model):
         counts, weights = self.calc_counts_and_weights(model)
-        return self.cic_prob_poisson(counts, weights)
+        return self.cic_prob_poisson_interp(counts, weights)
 
     def calc_counts_and_weights(self, model):
         indices = self.indices
@@ -131,7 +152,20 @@ class CICTabulator:
     def cic_prob_poisson(self, galaxy_counts, galaxy_weights):
         """Returns dP(N_CIC)/dN_CIC, assuming Poisson distributions"""
         bin_edges = self.bin_edges
-        poisson_dist = scipy.stats.poisson(mu=galaxy_counts[:, None])
-        hist = jnp.sum(jnp.diff(poisson_dist.cdf(bin_edges[None, :]), axis=-1)
+        poisson_cdf = jax.scipy.stats.poisson.cdf(
+            mu=galaxy_counts[:, None], k=bin_edges[None, :])
+        hist = jnp.sum(jnp.diff(poisson_cdf, axis=-1)
                        * galaxy_weights[:, None], axis=0)
-        return hist / jnp.sum(galaxy_weights) / jnp.diff(jnp.ceil(bin_edges))
+        return hist / jnp.sum(galaxy_weights) / jnp.diff(jnp.floor(bin_edges))
+
+    def cic_prob_poisson_interp(self, galaxy_counts, galaxy_weights):
+        """Same, but interpolates pretabulated Poisson CDF grid"""
+        bin_edges = self.bin_edges
+        poisson_cdf = jnp.array([cdf_interp.poisson(
+            mu=galaxy_counts, k=k) for k in bin_edges])
+        hist = jnp.sum(jnp.diff(poisson_cdf, axis=0)
+                       * galaxy_weights[None, :], axis=1)
+        return hist / jnp.sum(galaxy_weights) / jnp.diff(jnp.floor(bin_edges))
+
+
+GalaxyTabulator.tabulate_cic.__doc__ = CICTabulator.__init__.__doc__

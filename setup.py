@@ -8,9 +8,9 @@ from setuptools import setup, find_packages
 #     build_kwargs = {}
 #     raise
 # else:
-#     cic_ext = Extension(name="hodtab.counts_in_cylinders.engines."
+#     cic_ext = Extension(name="galtab.counts_in_cylinders.engines."
 #                              "counts_in_cylinders_engine",
-#                         sources=["hodtab/counts_in_cylinders/engines/"
+#                         sources=["galtab/counts_in_cylinders/engines/"
 #                                  "counts_in_cylinders_engine.pyx"],
 #                         language="c++",
 #                         extra_compile_args=["-Ofast"],
@@ -22,7 +22,7 @@ build_kwargs = {}
 setup(name="galtab",
       version="0.0.1.dev1",
       description="A general approach to tabulating HOD statistics",
-      url="http://github.com/AlanPearl/galtab",
+      url="https://github.com/AlanPearl/galtab",
       author="Alan Pearl",
       author_email="alanpearl@pitt.edu",
       license="MIT",

@@ -1,6 +1,6 @@
 import types
 from copy import copy
-import numpy as np
+import jax
 import jax.numpy as jnp
 
 
@@ -50,6 +50,8 @@ def make_placeholder_model(galtab):
         kwargs = {}
         if galtab.num_ptcl_requirement is not None:
             kwargs["Num_ptcl_requirement"] = galtab.num_ptcl_requirement
+        if galtab.seed is not None:
+            kwargs["seed"] = galtab.seed
         ph_model.populate_mock(galtab.halocat, **kwargs)
         galaxies = ph_model.mock.galaxy_table
     finally:
@@ -63,27 +65,26 @@ def make_placeholder_model(galtab):
             assert not hasattr(copied_model, "min_prob")
             assert not hasattr(copied_model, "max_prob")
 
-    galaxies.add_column(jnp.empty(len(galaxies), dtype=float), name="weights")
+    # galaxies.add_column(jnp.empty(len(galaxies), dtype=float), name="weights")
     return galaxies, ph_model
 
 
 # noinspection PyProtectedMember
-def calc_weights(galaxies, model, inplace=False):
-    if inplace:
-        weights = galaxies["weights"]
-    else:
-        weights = jnp.empty_like(galaxies["weights"])
+def calc_weights(galaxies, model):
+        weights = jnp.empty_like(galaxies["x"])
 
-    # Access the occupation component models
-    names = [x for x in model._input_model_dictionary
-             if x.endswith("_occupation")]
-    gal_types = [x.replace("_occupation", "") for x in names]
-    methods = [getattr(model, "mean_occupation_" + x) for x in gal_types]
+        # Access the occupation component models
+        names = [x for x in model._input_model_dictionary
+                 if x.endswith("_occupation")]
+        gal_types = [x.replace("_occupation", "") for x in names]
+        methods = [getattr(model, "mean_occupation_" + x) for x in gal_types]
 
-    for gal_type, method in zip(gal_types, methods):
-        mask = galaxies["gal_type"] == gal_type
-        mean_occ = method(table=galaxies[mask])
-        num_placeholders = galaxies["halo_num_" + gal_type][mask]
-        weights[mask] = mean_occ / num_placeholders
+        for gal_type, method in zip(gal_types, methods):
+            mask = galaxies["gal_type"] == gal_type
+            mean_occ = method(table=galaxies[mask])
+            num_placeholders = galaxies["halo_num_" + gal_type][mask]
+            # weights[mask] = mean_occ / num_placeholders
+            weights = jax.ops.index_update(weights, mask,
+                                           mean_occ / num_placeholders)
 
-    return weights
+        return weights

@@ -1,4 +1,4 @@
-Cython
 numpy
+scipy
 jax
 halotools>=0.7

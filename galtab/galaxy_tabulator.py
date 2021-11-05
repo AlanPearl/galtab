@@ -49,6 +49,8 @@ def make_placeholder_model(galtab):
         kwargs = {}
         if galtab.num_ptcl_requirement is not None:
             kwargs["Num_ptcl_requirement"] = galtab.num_ptcl_requirement
+        if galtab.seed is not None:
+            kwargs["seed"] = galtab.seed
         ph_model.populate_mock(galtab.halocat, **kwargs)
         galaxies = ph_model.mock.galaxy_table
     finally:
@@ -62,16 +64,13 @@ def make_placeholder_model(galtab):
             assert not hasattr(copied_model, "min_prob")
             assert not hasattr(copied_model, "max_prob")
 
-    galaxies.add_column(np.empty(len(galaxies), dtype=float), name="weights")
+    # galaxies.add_column(np.empty(len(galaxies), dtype=float), name="weights")
     return galaxies, ph_model
 
 
 # noinspection PyProtectedMember
-def calc_weights(galaxies, model, inplace=False):
-    if inplace:
-        weights = galaxies["weights"]
-    else:
-        weights = np.empty_like(galaxies["weights"])
+def calc_weights(galaxies, model):
+    weights = np.empty_like(galaxies["x"])
 
     # Access the occupation component models
     names = [x for x in model._input_model_dictionary
