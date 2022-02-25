@@ -6,6 +6,8 @@ import halotools.mock_observables as htmo
 
 from . import galaxy_tabulator as gt
 from . import cdf_interp
+from . import moments
+from .. import galtab
 
 
 class GalaxyTabulator:
@@ -16,7 +18,7 @@ class GalaxyTabulator:
     """
 
     def __init__(self, halocat, fiducial_model,
-                 min_weight_dict=None,
+                 min_quantile_dict=None,
                  max_weight_dict=None,
                  num_ptcl_requirement=None,
                  seed=None):
@@ -27,10 +29,11 @@ class GalaxyTabulator:
             Catalog containing the halos to populate galaxies on top of
         fiducial_model : htem.ModelFactory
             The model used to calculate the number of placeholder galaxies
-        min_weight_dict : Optional[dict]
+        min_quantile_dict : Optional[dict]
             Dictionary whose keys must be names of gal_types of fiducial_model,
-            and values specify the minimum probabilty to populate a placeholder
-            - default is 0.01 for all galaxy types
+            and values specify the minimum quantile of galaxies as a function
+            of the model's prim_haloprop to populate a placeholder
+            - default is 0.001 for all galaxy types
         max_weight_dict : Optional[dict]
             Same as min_weight_dict, but the values specify the maximum weight
             to assign to any placeholder galaxy before populating additional
@@ -46,12 +49,15 @@ class GalaxyTabulator:
         """
         self.halocat = halocat
         self.fiducial_model = fiducial_model
-        self.min_weight_dict = {} if min_weight_dict is None else min_weight_dict
+        self.min_quantile_dict = {} if min_quantile_dict is None else min_quantile_dict
         self.max_weight_dict = {} if max_weight_dict is None else max_weight_dict
         self.num_ptcl_requirement = num_ptcl_requirement
         self.seed = seed
         self.predictor = None
 
+        if not hasattr(fiducial_model, "mock"):
+            fiducial_model.populate_mock(halocat)
+        self.halo_table = fiducial_model.mock.halo_table
         self.galaxies, self._placeholder_model = self.populate_placeholders()
         # self.calc_weights(self._placeholder_model, inplace=True)
 
@@ -61,8 +67,8 @@ class GalaxyTabulator:
     def calc_weights(self, model):
         return gt.calc_weights(self.galaxies, model)
 
-    def tabulate_cic(self, **kwargs):
-        self.predictor = CICTabulator(self, **kwargs)
+    def tabulate_cic(self, *args, **kwargs):
+        self.predictor = CICTabulator(self, *args, **kwargs)
         return self.predictor
 
     def predict(self, model):
@@ -72,48 +78,19 @@ class GalaxyTabulator:
         return self.predictor.predict(model)
 
 
-class CICTabulator:
-    def __init__(self, galtab, bin_edges,
+class CICTabulator(galtab.CICTabulator):
+    def __init__(self, galtabulator, bin_edges_or_moments,
                  sample1_selector=None, sample2_selector=None,
-                 **kwargs):
-        """
-        Initialize a CICTabulator
-
-        This object tabulates the cylinder counts of each placeholder galaxy to
-        quickly, deterministically, and differentiably predict dP(N_CIC)/dN_CIC
-        for any given occupation model.
-
-        Parameters
-        ----------
-        galtab : GalaxyTabulator
-        bin_edges : np.ndarray
-        sample1_selector : Optional[callable]
-        sample2_selector : Optional[callable]
-
-        Note: Remaining keyword arguments are passed to halotools' counts-in-
-        cylinders function. There are two mandatory keyword arguments for this.
-
-        proj_search_radius : float
-        cylinder_half_length : float
-        """
-        self.galtab = galtab
-        self.bin_edges = bin_edges
-        self.sample1_selector = sample1_selector
-        self.sample2_selector = sample2_selector
-
-        self.sample1_inds = slice(None)
-        self.sample2_inds = slice(None)
+                 return_moments=False, interp_bins=True, **kwargs):
+        galtab.CICTabulator.__init__(
+            self, galtabulator, bin_edges_or_moments, sample1_selector,
+            sample2_selector, return_moments, interp_bins, **kwargs)
         if sample1_selector is not None:
             self.sample1_inds = jnp.array(
-                np.where(sample1_selector(galtab.galaxies))[0])
+                np.where(sample1_selector(galtabulator.galaxies))[0])
         if sample2_selector is not None:
             self.sample2_inds = jnp.array(
-                np.where(sample2_selector(galtab.galaxies))[0])
-
-        self.sample1 = galtab.galaxies[self.sample1_inds]
-        self.sample2 = galtab.galaxies[self.sample2_inds]
-        self.indices = None
-        self.tabulate(**kwargs)
+                np.where(sample2_selector(galtabulator.galaxies))[0])
 
     def tabulate(self, **kwargs):
         assert "proj_search_radius" in kwargs
@@ -130,17 +107,13 @@ class CICTabulator:
 
         kwargs["sample1"] = jnp.array([self.sample1[x] for x in "xyz"]).T
         kwargs["sample2"] = jnp.array([self.sample2[x] for x in "xyz"]).T
-        kwargs["period"] = self.galtab.halocat.Lbox
+        kwargs["period"] = self.galtabulator.halocat.Lbox
         kwargs["return_indexes"] = True
         self.indices = htmo.counts_in_cylinders(**kwargs)[1]
 
-    def predict(self, model):
-        counts, weights = self.calc_counts_and_weights(model)
-        return self.cic_prob_poisson_interp(counts, weights)
-
     def calc_counts_and_weights(self, model):
         indices = self.indices
-        weights = gt.calc_weights(self.galtab.galaxies, model)
+        weights = gt.calc_weights(self.galtabulator.galaxies, model)
         weights1 = weights[self.sample1_inds]
         weights2 = weights[self.sample2_inds]
 
@@ -148,6 +121,10 @@ class CICTabulator:
         cic = cic.at[indices["i1"]].add(weights2[indices["i2"]])
 
         return cic, weights1
+
+    def cic_moments(self, galaxy_counts, galaxy_weights):
+        return moments.moments_from_samples(
+            galaxy_counts, k_vals=self.bin_edges, weights=galaxy_weights)
 
     def cic_prob_poisson(self, galaxy_counts, galaxy_weights):
         """Returns dP(N_CIC)/dN_CIC, assuming Poisson distributions"""
@@ -168,4 +145,5 @@ class CICTabulator:
         return hist / jnp.sum(galaxy_weights) / jnp.diff(jnp.floor(bin_edges))
 
 
+CICTabulator.__init__.__doc__ = galtab.CICTabulator.__init__.__doc__
 GalaxyTabulator.tabulate_cic.__doc__ = CICTabulator.__init__.__doc__

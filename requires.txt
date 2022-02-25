@@ -2,3 +2,5 @@ numpy
 scipy
 jax
 halotools>=0.7
+pandas
+astropy
