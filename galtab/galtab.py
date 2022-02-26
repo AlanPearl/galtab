@@ -159,8 +159,10 @@ class CICTabulator:
         if "return_indexes" in kwargs:
             raise ValueError("Attempting to overwrite 'return_indexes' kwarg")
 
-        kwargs["sample1"] = np.array([self.sample1[f"obs_{x}"] for x in "xyz"]).T
-        kwargs["sample2"] = np.array([self.sample2[f"obs_{x}"] for x in "xyz"]).T
+        kwargs["sample1"] = np.array([self.sample1[f"obs_{x}"] for x in "xyz"],
+                                     dtype=np.float64).T
+        kwargs["sample2"] = np.array([self.sample2[f"obs_{x}"] for x in "xyz"],
+                                     dtype=np.float64).T
         kwargs["period"] = self.galtabulator.halocat.Lbox
         kwargs["return_indexes"] = True
         self.indices = htmo.counts_in_cylinders(**kwargs)[1]
