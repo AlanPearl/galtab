@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-# import jax.numpy as jnp
 
 from astropy import cosmology
 # import halotools.empirical_models as htem
