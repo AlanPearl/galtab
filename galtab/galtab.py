@@ -178,18 +178,7 @@ class CICTabulator:
         else:
             return cic
 
-    def calc_counts_and_weights(self, model):
-        indices = self.indices
-        weights = self.galtabulator.calc_weights(model)
-        weights1 = weights[self.sample1_inds]
-        weights2 = weights[self.sample2_inds]
-
-        cic_galaxies = np.zeros((len(weights)), dtype=float)
-        np.add.at(cic_galaxies, indices["i1"], weights2[indices["i2"]])
-
-        return cic_galaxies, weights1
-
-    def calc_cic(self, model):
+    def calc_cic(self, model, return_number_densities=False):
         n1, n_mc = self.n1, self.n_mc
         indices = self.indices
         weights = self.galtabulator.calc_weights(model)
@@ -207,6 +196,13 @@ class CICTabulator:
         p_ncic_configs = ncic_hists / np.sum(mc_bool_arrays, axis=0)[:, None]
         p_ncic = np.nanmean(p_ncic_configs, axis=0)
 
-        return p_ncic
+        if return_number_densities:
+            vol = np.product(self.galtabulator.halocat.Lbox)
+            weights1 = weights[self.sample1_inds]
+            weights2 = weights[self.sample2_inds]
+            return p_ncic, np.sum(weights1)/vol, np.sum(weights2)/vol
+        else:
+            return p_ncic
+
 
 GalaxyTabulator.tabulate_cic.__doc__ = CICTabulator.__init__.__doc__
