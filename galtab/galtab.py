@@ -86,11 +86,11 @@ class GalaxyTabulator:
         self.predictor = CICTabulator(self, **kwargs)
         return self.predictor
 
-    def predict(self, model):
+    def predict(self, model, *args, **kwargs):
         if self.predictor is None:
             raise RuntimeError("You must tabulate a statistic "
                                "before predicting it")
-        return self.predictor.predict(model)
+        return self.predictor.predict(model, *args, **kwargs)
 
     def tabulate_halo_inds(self):
         gal_df = pd.DataFrame(dict(halo_id=self.galaxies["halo_id"]))
@@ -170,8 +170,9 @@ class CICTabulator:
         # Remove self-counting!
         self.indices = self.indices[self.indices["i1"] != self.indices["i2"]]
 
-    def predict(self, model):
-        cic = self.calc_cic(model)
+    def predict(self, model, return_number_densities=False):
+        cic = self.calc_cic(
+            model, return_number_densities=return_number_densities)
         if self.k_vals is not None:
             return moments.moments_from_pdf(
                 np.arange(len(cic)), cic, self.k_vals)
