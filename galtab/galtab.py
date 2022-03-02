@@ -173,14 +173,14 @@ class CICTabulator:
     def predict(self, model, return_number_densities=False):
         cic = self.calc_cic(
             model, return_number_densities=return_number_densities)
-        n = None
+        n1 = n2 = None
         if return_number_densities:
-            cic, n = cic
+            cic, n1, n2 = cic
         if self.k_vals is not None:
             cic = moments.moments_from_pdf(
                 np.arange(len(cic)), cic, self.k_vals)
         if return_number_densities:
-            return cic, n
+            return cic, n1, n2
         else:
             return cic
 
