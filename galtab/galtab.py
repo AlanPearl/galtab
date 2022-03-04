@@ -44,7 +44,7 @@ class GalaxyTabulator:
             to assign to any placeholder galaxy before populating additional
             placeholder(s) - default is 1 for centrals and 0.25 for satellites
         num_ptcl_requirement : Optional[int]
-            Passed to model.populate_mock()
+            Passed to the initial call of model.populate_mock()
         seed : Optional[int]
             Monte-Carlo realization seeds; also passed to model.populate_mock()
         cosmo : astropy.Cosmology object

@@ -10,7 +10,7 @@ def placeholder_occupation(self, **kwargs):
     mean_occ = self.mean_occupation(**kwargs)
 
     occupation = np.ceil(mean_occ / self.max_prob).astype(int)
-    return np.where(mean_occ > self.min_prob, occupation, 0)
+    return np.where(mean_occ >= self.min_prob, occupation, 0)
 
 
 # noinspection PyProtectedMember
