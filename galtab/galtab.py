@@ -23,8 +23,8 @@ class GalaxyTabulator:
     """
 
     def __init__(self, halocat, fiducial_model, n_mc=10,
-                 min_quantile_dict=None, max_weight_dict=None,
-                 num_ptcl_requirement=None, seed=None, cosmo=None):
+                 min_quant=0.001, max_quant=0.9999, num_ptcl_requirement=None,
+                 seed=None, cosmo=None):
         """
         Parameters
         ----------
@@ -34,15 +34,12 @@ class GalaxyTabulator:
             The model used to calculate the number of placeholder galaxies
         n_mc : int
             Number of Monte-Carlo realizations to combine
-        min_quantile_dict : Optional[dict]
-            Dictionary whose keys must be names of gal_types of fiducial_model,
-            and values specify the minimum quantile of galaxies as a function
-            of the model's prim_haloprop to populate a placeholder
-            - default is 0.001 for all galaxy types
-        max_weight_dict : Optional[dict]
-            Same as min_weight_dict, but the values specify the maximum weight
-            to assign to any placeholder galaxy before populating additional
-            placeholder(s) - default is 1 for centrals and 0.25 for satellites
+        min_quant : float (default = 0.001)
+            The minimum quantile of galaxies as a function of the model's
+            prim_haloprop to populate at least one placeholder
+        max_quant : float (default = 0.999)
+            The quantile of the Poisson distribution centered around <N_sat>
+            to use as the number of satellite placeholders per halo.
         num_ptcl_requirement : Optional[int]
             Passed to the initial call of model.populate_mock()
         seed : Optional[int]
@@ -52,13 +49,13 @@ class GalaxyTabulator:
 
         Examples
         --------
-        TODO
+        TODO: Add example usage of galtab
         """
         self.halocat = halocat
         self.fiducial_model = fiducial_model
         self.n_mc = n_mc
-        self.min_quantile_dict = {} if min_quantile_dict is None else min_quantile_dict
-        self.max_weight_dict = {} if max_weight_dict is None else max_weight_dict
+        self.min_quant = min_quant
+        self.max_quant = max_quant
         if num_ptcl_requirement is None:
             self.num_ptcl_requirement = htsm.sim_defaults.Num_ptcl_requirement
         else:
@@ -66,13 +63,22 @@ class GalaxyTabulator:
         self.seed = seed
         self.cosmo = bplcosmo if cosmo is None else cosmo
         self.predictor = None
+        self.weights = None
 
-        if not hasattr(fiducial_model, "mock"):
-            fiducial_model.populate_mock(
-                halocat, seed=seed,
-                Num_ptcl_requirement=self.num_ptcl_requirement)
+        # if not hasattr(fiducial_model, "mock"):
+        # ===================================================
+        # Actually, always populate_mock in case the model was
+        # previously populated with a different halo catalog
+        fiducial_model.populate_mock(
+            halocat, seed=seed,
+            Num_ptcl_requirement=self.num_ptcl_requirement)
+        # ===================================================
         self.halo_table = fiducial_model.mock.halo_table
         self.galaxies, self._placeholder_model = self.populate_placeholders()
+        self.halo_table = self._placeholder_model.mock.halo_table
+        useless_halos = ((self.halo_table["halo_num_satellites"] < 1) &
+                         (self.halo_table["halo_num_centrals"] < 1))
+        self.halo_table = self.halo_table[~useless_halos]
         self.halo_inds = self.tabulate_halo_inds()
         # self.calc_weights(self._placeholder_model, inplace=True)
 
@@ -80,7 +86,9 @@ class GalaxyTabulator:
         return gt.make_placeholder_model(self)
 
     def calc_weights(self, model):
-        return gt.calc_weights(self.halo_table, self.galaxies, self.halo_inds, model)
+        self.weights = gt.calc_weights(
+            self.halo_table, self.galaxies, self.halo_inds, model)
+        return self.weights
 
     def tabulate_cic(self, **kwargs):
         self.predictor = CICTabulator(self, **kwargs)
@@ -188,18 +196,24 @@ class CICTabulator:
         n1, n_mc = self.n1, self.n_mc
         indices = self.indices
         weights = self.galtabulator.calc_weights(model)
+        previous_ints = weights.astype(int)
+        next_int_probs = weights % 1
 
-        mc_bool_arrays = self.mc_rands < weights[:, None]
+        # mc_bool_arrays = self.mc_rands < weights[:, None]
+        mc_num_arrays = previous_ints[:, None] + (self.mc_rands <
+                                                  next_int_probs[:, None])
 
         ncic_arrays = np.zeros((n1, n_mc), dtype=int)
         np.add.at(ncic_arrays, indices["i1"],
-                  mc_bool_arrays[self.sample2_inds][indices["i2"]])
+                  mc_num_arrays[self.sample2_inds][indices["i2"]])
 
         numbins = np.max(ncic_arrays) + 1
         ncic_arrays1 = ncic_arrays + (numbins * np.arange(n_mc))
-        ncic_hists = np.bincount(ncic_arrays1.ravel()[mc_bool_arrays.ravel()],
-                                 minlength=numbins*n_mc).reshape(n_mc, -1)
-        p_ncic_configs = ncic_hists / np.sum(mc_bool_arrays, axis=0)[:, None]
+
+        ncic_hists = np.bincount(
+            ncic_arrays1.ravel(), weights=mc_num_arrays.ravel(),
+            minlength=numbins * n_mc).reshape(n_mc, -1)
+        p_ncic_configs = ncic_hists / np.sum(mc_num_arrays, axis=0)[:, None]
         p_ncic = np.nanmean(p_ncic_configs, axis=0)
 
         if return_number_densities:
