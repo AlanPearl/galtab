@@ -1,18 +1,13 @@
 import numpy as np
 import pandas as pd
 
-from astropy import cosmology
+# from astropy import cosmology
 # import halotools.empirical_models as htem
 import halotools.mock_observables as htmo
 import halotools.sim_manager as htsm
 
 from . import galaxy_tabulator as gt
 from . import moments
-
-bplcosmo = cosmology.FlatLambdaCDM(name="Bolshoi-Planck",
-                                   H0=67.8,
-                                   Om0=0.307,
-                                   Ob0=0.048)
 
 
 class GalaxyTabulator:
@@ -36,10 +31,10 @@ class GalaxyTabulator:
             Number of Monte-Carlo realizations to combine
         min_quant : float (default = 0.001)
             The minimum quantile of galaxies as a function of the model's
-            prim_haloprop to populate at least one placeholder
-        max_quant : float (default = 0.999)
+            prim_haloprop to populate at least one placeholder in such a halo
+        max_quant : float (default = 0.9999)
             The quantile of the Poisson distribution centered around <N_sat>
-            to use as the number of satellite placeholders per halo.
+            to use as the number of satellite placeholders per halo
         num_ptcl_requirement : Optional[int]
             Passed to the initial call of model.populate_mock()
         seed : Optional[int]
@@ -61,18 +56,14 @@ class GalaxyTabulator:
         else:
             self.num_ptcl_requirement = num_ptcl_requirement
         self.seed = seed
-        self.cosmo = bplcosmo if cosmo is None else cosmo
+        self.cosmo = halocat.cosmology if cosmo is None else cosmo
         self.predictor = None
         self.weights = None
 
-        # if not hasattr(fiducial_model, "mock"):
-        # ===================================================
-        # Actually, always populate_mock in case the model was
-        # previously populated with a different halo catalog
         fiducial_model.populate_mock(
             halocat, seed=seed,
             Num_ptcl_requirement=self.num_ptcl_requirement)
-        # ===================================================
+
         self.halo_table = fiducial_model.mock.halo_table
         self.galaxies, self._placeholder_model = self.populate_placeholders()
         self.halo_table = self._placeholder_model.mock.halo_table
@@ -80,7 +71,6 @@ class GalaxyTabulator:
                          (self.halo_table["halo_num_centrals"] < 1))
         self.halo_table = self.halo_table[~useless_halos]
         self.halo_inds = self.tabulate_halo_inds()
-        # self.calc_weights(self._placeholder_model, inplace=True)
 
     def populate_placeholders(self):
         return gt.make_placeholder_model(self)
@@ -159,13 +149,13 @@ class CICTabulator:
 
     def tabulate(self, **kwargs):
         if "sample1" in kwargs:
-            raise ValueError("Attempting to overwrite 'sample1' kwarg")
+            raise ValueError("Cannot overwrite 'sample1' kwarg")
         if "sample2" in kwargs:
-            raise ValueError("Attempting to overwrite 'sample2' kwarg")
+            raise ValueError("Cannot overwrite 'sample2' kwarg")
         if "period" in kwargs:
-            raise ValueError("Attempting to overwrite 'period' kwarg")
+            raise ValueError("Cannot overwrite 'period' kwarg")
         if "return_indexes" in kwargs:
-            raise ValueError("Attempting to overwrite 'return_indexes' kwarg")
+            raise ValueError("Cannot overwrite 'return_indexes' kwarg")
 
         kwargs["sample1"] = np.array([self.sample1[f"obs_{x}"] for x in "xyz"],
                                      dtype=np.float64).T
@@ -199,7 +189,6 @@ class CICTabulator:
         previous_ints = weights.astype(int)
         next_int_probs = weights % 1
 
-        # mc_bool_arrays = self.mc_rands < weights[:, None]
         mc_num_arrays = previous_ints[:, None] + (self.mc_rands <
                                                   next_int_probs[:, None])
 
