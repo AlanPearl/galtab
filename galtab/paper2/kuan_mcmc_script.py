@@ -181,7 +181,7 @@ num_cic_observables = np.sum(observable_nonzero_mask[cic_mask])
 assert np.all(observable_nonzero_mask[not_cic_mask]), \
     "Found a zero value for n or wp"
 my_vals_copy = my_vals.copy()[observable_nonzero_mask]
-my_covar_copy = my_covar.copy()[observable_nonzero_mask, observable_nonzero_mask]
+my_covar_copy = my_covar.copy()[observable_nonzero_mask, :][:, observable_nonzero_mask]
 observable_scaling = 1 / my_vals_copy
 # my_vals_copy[0] *= 1e3
 # my_covar_copy[:, 0] *= 1e3
