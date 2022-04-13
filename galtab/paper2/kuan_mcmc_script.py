@@ -73,11 +73,14 @@ rp_cens = np.sqrt(rp_edges[:-1] * rp_edges[1:])
 cic_edges = np.concatenate([np.arange(-0.5, 9),
                             np.round(np.geomspace(10, 150, 20)) - 0.5])
 cic_cens = 0.5 * (cic_edges[:-1] + cic_edges[1:])
+cic_bin_inds = np.repeat(np.arange(len(cic_edges)-1),
+                         np.diff(cic_edges).astype(int))
 cic_kmax = 5
 
 kuan_uncerts = np.array(uncertainties.correlated_values(obs_val, obs_cov))
 # Make sure P(Ncic) is normalized exactly
-cic_pdf = kuan_uncerts[cic_mask] / np.sum(kuan_uncerts[cic_mask])
+kuan_uncerts[cic_mask] /= np.sum(kuan_uncerts[cic_mask])
+cic_pdf = kuan_uncerts[cic_mask]
 
 # Standardized by dividing by sigma^k for k>3
 # (This seems to be the more common way to standardize moments, so I guess I'll do this)
@@ -95,7 +98,7 @@ if full_cic_distribution:
 else:
     my_uncerts = [*kuan_uncerts[not_cic_mask],
                   *cic_moments]
-my_vals = [x.nominal_value for x in my_uncerts]
+my_vals = np.array([x.nominal_value for x in my_uncerts])
 my_covar = np.array(uncertainties.covariance_matrix(my_uncerts))
 
 # Construct the assembly bias-added Zheng 2007 HOD model
@@ -146,8 +149,9 @@ def predict_wp(galaxy_tabulator, weights=None, new_model=None):
 
 
 # Set up GalTab to calculate CiC deterministically
+k_vals = None if full_cic_distribution else np.arange(1, cic_kmax + 1)
 gtab = galtab.GalaxyTabulator(halocat, model)
-gtab.tabulate_cic(k_vals=np.arange(1, cic_kmax + 1),
+gtab.tabulate_cic(k_vals=k_vals,
                   proj_search_radius=proj_search_radius,
                   cylinder_half_length=cylinder_half_length)
 
@@ -157,26 +161,40 @@ def observables_from_dhod_params(dhod_params):
     param_dict = dict(zip(param_names, dhod_params))
     model.param_dict.update(param_dict)
     cic, n1, _ = gtab.predict(model, return_number_densities=True)
+    if full_cic_distribution:
+        binned_cic = np.zeros(num_cic_observables)
+        np.add.at(binned_cic, cic_bin_inds[:len(cic)], cic)
+        cic = binned_cic
     # n, wp = halotab.predict(model)
     wp = predict_wp(gtab, gtab.weights)
     return n1, wp, cic
 
 
 # When calculating likelihood from covariance matrix,
-# multiply number density by 10^3 so it is a similar order of magnitude
+# multiply number density by 10^3, so it is a similar order of magnitude
 # to the other observables. This helps with machine precision.
-# =====================================================================
-my_vals_copy = my_vals.copy()
-my_covar_copy = my_covar.copy()
-my_vals_copy[0] *= 1e3
-my_covar_copy[:, 0] *= 1e3
-my_covar_copy[0, :] *= 1e3
+# ======================================================================
+# UPDATE: Rescale ALL quantities such that Kuan's data is all equal to 1
+# ======================================================================
+observable_nonzero_mask = my_vals != 0
+num_cic_observables = np.sum(observable_nonzero_mask[cic_mask])
+assert np.all(observable_nonzero_mask[not_cic_mask]), \
+    "Found a zero value for n or wp"
+my_vals_copy = my_vals.copy()[observable_nonzero_mask]
+my_covar_copy = my_covar.copy()[observable_nonzero_mask, observable_nonzero_mask]
+observable_scaling = 1 / my_vals_copy
+# my_vals_copy[0] *= 1e3
+# my_covar_copy[:, 0] *= 1e3
+# my_covar_copy[0, :] *= 1e3
+my_vals_copy *= observable_scaling
+my_covar_copy *= observable_scaling[:, None] * observable_scaling[None, :]
 loglike = scipy.stats.multivariate_normal(mean=my_vals_copy, cov=my_covar_copy).logpdf
 
 
 def loglike_from_observables(observables):
     observables = observables.copy()
-    observables[0] *= 1e3
+    observables *= observable_scaling
+    # observables[0] *= 1e3
     return loglike(observables)
 
 
@@ -230,7 +248,7 @@ param_names = ["logMmin", "sigma_logM", "alpha", "logM1", "logM0",
                "mean_occupation_satellites_assembias_param1"]
 initial_state = [fiducial_params[x] for x in param_names]
 ndim = len(initial_state)
-backend = emcee.backends.HDFBackend("kuan-mcmc-backend-using-galtab-moments.h5")
+backend = emcee.backends.HDFBackend("kuan-mcmc-backend.h5")
 if start_new_mcmc:
     backend.reset(nwalkers, ndim)
 sampler = emcee.EnsembleSampler(nwalkers=nwalkers, ndim=ndim, log_prob_fn=logprob,
