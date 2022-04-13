@@ -175,8 +175,8 @@ class CICTabulator:
         if return_number_densities:
             cic, n1, n2 = cic
         if self.k_vals is not None:
-            cic = moments.moments_from_pdf(
-                np.arange(len(cic)), cic, self.k_vals)
+            cic = moments.moments_from_samples(
+                np.arange(len(cic)), self.k_vals, cic)
         if return_number_densities:
             return cic, n1, n2
         else:
