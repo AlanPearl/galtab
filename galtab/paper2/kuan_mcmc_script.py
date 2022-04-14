@@ -46,6 +46,7 @@ nwalkers = a.nwalkers
 full_cic_distribution = a.full_cic_distribution
 start_from_kuan_best_fit = a.start_from_kuan_best_fit
 use_old_moment_binning = a.use_old_moment_binning
+kuan_best_fits = [12.25, 0.2, 0.95, 13.44, 12.5, 0.9, -0.1]
 
 # Load Kuan's data
 # ================
@@ -246,7 +247,10 @@ blobs_dtype = [("n", float),
 param_names = ["logMmin", "sigma_logM", "alpha", "logM1", "logM0",
                "mean_occupation_centrals_assembias_param1",
                "mean_occupation_satellites_assembias_param1"]
-initial_state = [fiducial_params[x] for x in param_names]
+if start_from_kuan_best_fit:
+    initial_state = kuan_best_fits
+else:
+    initial_state = [fiducial_params[x] for x in param_names]
 ndim = len(initial_state)
 backend = emcee.backends.HDFBackend("kuan-mcmc-backend.h5")
 if start_new_mcmc:
