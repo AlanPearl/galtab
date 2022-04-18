@@ -46,7 +46,7 @@ nwalkers = a.nwalkers
 full_cic_distribution = a.full_cic_distribution
 start_from_kuan_best_fit = a.start_from_kuan_best_fit
 use_old_moment_binning = a.use_old_moment_binning
-kuan_best_fits = [12.25, 0.2, 0.95, 13.44, 12.5, 0.9, -0.1]
+kuan_best_fits = [12.265, 0.218, 0.950, 13.454, 12.617, 0.811, -0.147]
 
 # Load Kuan's data
 # ================
@@ -77,6 +77,7 @@ cic_cens = 0.5 * (cic_edges[:-1] + cic_edges[1:])
 cic_bin_inds = np.repeat(np.arange(len(cic_edges)-1),
                          np.diff(cic_edges).astype(int))
 cic_kmax = 5
+cic_num_obs = len(cic_cens) if full_cic_distribution else cic_kmax
 
 kuan_uncerts = np.array(uncertainties.correlated_values(obs_val, obs_cov))
 # Make sure P(Ncic) is normalized exactly
@@ -150,7 +151,7 @@ def predict_wp(galaxy_tabulator, weights=None, new_model=None):
 
 
 # Set up GalTab to calculate CiC deterministically
-k_vals = None if full_cic_distribution else np.arange(1, cic_kmax + 1)
+k_vals = None if full_cic_distribution else np.arange(cic_kmax) + 1
 gtab = galtab.GalaxyTabulator(halocat, model)
 gtab.tabulate_cic(k_vals=k_vals,
                   proj_search_radius=proj_search_radius,
@@ -158,8 +159,8 @@ gtab.tabulate_cic(k_vals=k_vals,
 
 
 # Model predictions of n, wp, and cic
-def observables_from_dhod_params(dhod_params):
-    param_dict = dict(zip(param_names, dhod_params))
+def observables_from_hod_params(hod_params):
+    param_dict = dict(zip(param_names, hod_params))
     model.param_dict.update(param_dict)
     cic, n1, _ = gtab.predict(model, return_number_densities=True)
     if full_cic_distribution:
@@ -175,27 +176,28 @@ def observables_from_dhod_params(dhod_params):
 # multiply number density by 10^3, so it is a similar order of magnitude
 # to the other observables. This helps with machine precision.
 # ======================================================================
-# UPDATE: Rescale ALL quantities such that Kuan's data is all equal to 1
-# ======================================================================
 observable_nonzero_mask = my_vals != 0
 num_cic_observables = np.sum(observable_nonzero_mask[cic_mask])
 assert np.all(observable_nonzero_mask[not_cic_mask]), \
     "Found a zero value for n or wp"
 my_vals_copy = my_vals.copy()[observable_nonzero_mask]
 my_covar_copy = my_covar.copy()[observable_nonzero_mask, :][:, observable_nonzero_mask]
-observable_scaling = 1 / my_vals_copy
-# my_vals_copy[0] *= 1e3
-# my_covar_copy[:, 0] *= 1e3
-# my_covar_copy[0, :] *= 1e3
-my_vals_copy *= observable_scaling
-my_covar_copy *= observable_scaling[:, None] * observable_scaling[None, :]
-loglike = scipy.stats.multivariate_normal(mean=my_vals_copy, cov=my_covar_copy).logpdf
+
+my_vals_copy[0] *= 1e3
+my_covar_copy[:, 0] *= 1e3
+my_covar_copy[0, :] *= 1e3
+# We must allow singular covariance matrices if using the full CiC distribution
+# because there is a degeneracy by definition, where all bins must sum to 1.
+# allow_singular=True uses the Moore-Penrose pseudo-inverse, which effectively
+# ignores deviations along the direction of this degeneracy.
+loglike = scipy.stats.multivariate_normal(mean=my_vals_copy, cov=my_covar_copy,
+                                          allow_singular=full_cic_distribution).logpdf
 
 
 def loglike_from_observables(observables):
     observables = observables.copy()
-    observables *= observable_scaling
-    # observables[0] *= 1e3
+    # observables *= observable_scaling
+    observables[0] *= 1e3
     return loglike(observables)
 
 
@@ -226,15 +228,15 @@ def logprior(p):
     return 0.0
 
 
-def logprob(dhod_params):
+def logprob(hod_params):
     # Default NaN values for n_galtab, wp, and cic
-    nan_blobs = [np.nan, [np.nan] * len(rp_cens), [np.nan] * cic_kmax]
+    nan_blobs = [np.nan, [np.nan] * len(rp_cens), [np.nan] * cic_num_obs]
 
-    logprior_here = logprior(dhod_params)
+    logprior_here = logprior(hod_params)
     if not np.isfinite(logprior_here):
         return logprior_here, *nan_blobs
 
-    n_gt, wp, cic = observables_from_dhod_params(dhod_params)
+    n_gt, wp, cic = observables_from_hod_params(hod_params)
     observables = np.array([n_gt, *wp, *cic])
     loglike_here = loglike_from_observables(observables)
     return loglike_here + logprior_here, n_gt, wp, cic
@@ -242,7 +244,7 @@ def logprob(dhod_params):
 
 blobs_dtype = [("n", float),
                ("wp", float, len(rp_cens)),
-               ("cic", float, cic_kmax)]
+               ("cic", float, cic_num_obs)]
 
 param_names = ["logMmin", "sigma_logM", "alpha", "logM1", "logM0",
                "mean_occupation_centrals_assembias_param1",
