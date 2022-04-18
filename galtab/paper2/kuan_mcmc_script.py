@@ -21,7 +21,7 @@ parser.add_argument(
     "-c", "--continue-mcmc", action="store_true",
     help="Continue MCMC chain from where it left off")
 parser.add_argument(
-    "-s", "--nsteps", type=int, default=300,
+    "-s", "--nsteps", type=int, default=600,
     help="Number of MCMC chains to run")
 parser.add_argument(
     "-w", "--nwalkers", type=int, default=50,
