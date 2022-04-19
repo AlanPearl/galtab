@@ -77,7 +77,7 @@ cic_cens = 0.5 * (cic_edges[:-1] + cic_edges[1:])
 cic_bin_inds = np.repeat(np.arange(len(cic_edges)-1),
                          np.diff(cic_edges).astype(int))
 cic_kmax = 5
-cic_num_obs = len(cic_cens) if full_cic_distribution else cic_kmax
+cic_num_obs = np.sum(obs_val[cic_mask] != 0) if full_cic_distribution else cic_kmax
 
 kuan_uncerts = np.array(uncertainties.correlated_values(obs_val, obs_cov))
 # Make sure P(Ncic) is normalized exactly
