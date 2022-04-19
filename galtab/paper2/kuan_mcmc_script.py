@@ -74,10 +74,10 @@ rp_cens = np.sqrt(rp_edges[:-1] * rp_edges[1:])
 cic_edges = np.concatenate([np.arange(-0.5, 9),
                             np.round(np.geomspace(10, 150, 20)) - 0.5])
 cic_cens = 0.5 * (cic_edges[:-1] + cic_edges[1:])
-cic_bin_inds = np.repeat(np.arange(len(cic_edges)-1),
-                         np.diff(cic_edges).astype(int))
 cic_kmax = 5
 cic_num_obs = np.sum(obs_val[cic_mask] != 0) if full_cic_distribution else cic_kmax
+cic_bin_inds = np.repeat(np.arange(cic_num_obs),
+                         np.diff(cic_edges[:cic_num_obs+1]).astype(int))
 
 kuan_uncerts = np.array(uncertainties.correlated_values(obs_val, obs_cov))
 # Make sure P(Ncic) is normalized exactly
@@ -165,7 +165,7 @@ def observables_from_hod_params(hod_params):
     cic, n1, _ = gtab.predict(model, return_number_densities=True)
     if full_cic_distribution:
         binned_cic = np.zeros(num_cic_observables)
-        np.add.at(binned_cic, cic_bin_inds[:len(cic)], cic)
+        np.add.at(binned_cic, cic_bin_inds[:len(cic)], cic[:len(cic_bin_inds)])
         cic = binned_cic
     # n, wp = halotab.predict(model)
     wp = predict_wp(gtab, gtab.weights)
