@@ -1,6 +1,8 @@
+import os
+import argparse
+
 import numpy as np
 from mpi4py import MPI
-import argparse
 from astropy.io import fits
 import tqdm
 
@@ -24,12 +26,24 @@ if __name__ == "__main__":
     parser.add_argument(
         "-f", "--first-n", type=int, default=None, metavar="N",
         help="Run this code on the first N data only")
+    parser.add_argument(
+        "--rand-dir", type=str, default="/home/alan/data/DESI/SV3/rands_fuji/",
+        help="Directory containing the randoms (rancomb_... files)")
+    parser.add_argument(
+        "--data-dir", type=str, default="/home/alan/data/DESI/SV3/",
+        help="Directory containing the data (stellar_mass_specz_ztile... file)")
+    parser.add_argument(
+        "--num-rand-files", type=int, default=4,
+        help="Number of random catalogs to concatenate (up to 18)")
 
     a = parser.parse_args()
     output_file = a.output
     make_small_region_cut = a.small_region
     progress = a.progress
     first_n = a.first_n
+    rand_dir = a.rand_dir
+    data_dir = a.data_dir
+    num_rand_files = a.num_rand_files
 
     comm = MPI.COMM_WORLD
     comm_size = comm.Get_size()
@@ -40,9 +54,10 @@ if __name__ == "__main__":
     # Load in DESI data and corresponding randoms
     # ===========================================
     rand_cats = []
-    for i in range(4):
-        randfile = ("/home/alan/data/DESI/SV3/rands_fuji/rancomb"
-                    f"_{i}brightwdupspec_Alltiles.fits")
+    for i in range(num_rand_files):
+
+        randfile = os.path.join(
+            rand_dir, f"rancomb_{i}brightwdupspec_Alltiles.fits")
         rands = fits.open(randfile)[1].data
 
         randcut = rands["ZWARN"] == 0
@@ -54,7 +69,8 @@ if __name__ == "__main__":
         rand_cats.append(rands)
     rands = np.concatenate(rand_cats)
 
-    datafile = "/home/alan/data/DESI/SV3/stellar_mass_specz_ztile-sv3-bright-cumulative.fits"
+    datafile = os.path.join(
+        data_dir, "stellar_mass_specz_ztile-sv3-bright-cumulative.fits")
     data = fits.open(datafile)[1].data
 
     datacut = data["ZWARN"] == 0
