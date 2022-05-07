@@ -4,3 +4,6 @@ jax
 halotools>=0.7
 pandas
 astropy
+tqdm
+fast3tree
+mpi4py
