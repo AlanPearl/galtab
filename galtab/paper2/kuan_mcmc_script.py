@@ -15,7 +15,7 @@ import galtab
 # Make sure Corrfunc is installed, or else this will run VERY slow
 assert ms.cf.corrfunc_works
 
-parser = argparse.ArgumentParser(prog="kuan-mcmc")
+parser = argparse.ArgumentParser(prog="kuan_mcmc_script")
 parser.formatter_class = argparse.ArgumentDefaultsHelpFormatter
 parser.add_argument(
     "-c", "--continue-mcmc", action="store_true",
@@ -118,15 +118,17 @@ halocat = htsm.CachedHaloCatalog(simname="bolplanck", redshift=redshift)
 model.populate_mock(halocat)
 
 
-# Sadly, we can't make use of TabCorr because it doesn't work
-# for assembly bias models :(((((((((((
-# ===========================================================
+# TODO: Use TabCorr - it should work for assembly bias models now
+# ===============================================================
 # halotab_file = "halotab-kuan-mcmc.hdf5"
 # try:
 #     halotab = tabcorr.TabCorr.read(halotab_file)
 # except OSError:
 #     halotab = tabcorr.TabCorr.tabulate(
-#         halocat, htmo.wp, rp_edges, pi_max=pimax)
+#         halocat, htmo.wp, rp_edges, pi_max=pimax,
+#         prim_haloprop_key="halo_mvir", prim_haloprop_bins=100,
+#         sec_haloprop_key="halo_nfw_conc",
+#         sec_haloprop_percentile_bins=2, project_xyz=True)
 #     halotab.write(halotab_file)
 #
 # Instead, we have to calculate wp(rp) on runtime for each of the 10
