@@ -4,11 +4,11 @@ import argparse
 import numpy as np
 from mpi4py import MPI
 from astropy.io import fits
+import astropy.cosmology
 import tqdm
 
 import galtab.obs
 from galtab.paper2 import desi_sv3_pointings
-import mocksurvey as ms
 
 
 if __name__ == "__main__":
@@ -84,13 +84,13 @@ if __name__ == "__main__":
     proj_search_radius = 2.0
     cylinder_half_length = 10.0
 
-    cosmo = ms.bplcosmo
+    cosmo = astropy.cosmology.Planck13
     cylinder_half_length = cylinder_half_length
     proj_search_radius = proj_search_radius
 
     ra = data["TARGET_RA"]
     dec = data["TARGET_DEC"]
-    dist = ms.util.comoving_disth(data["Z"], cosmo)
+    dist = cosmo.comoving_distance(data["Z"]).value * cosmo.h
 
     dist_max, dist_min = np.max(dist), np.min(dist)
     dist_center = (dist_max + dist_min)/2
@@ -115,6 +115,7 @@ if __name__ == "__main__":
             job_data, job_rands, proj_search_radius,
             dist_range, progress=progress, tqdm_kwargs=dict(leave=False))
         return rands_in_cylinders
+
 
     num_jobs = len(desi_sv3_pointings.lims)
     job_assignments = np.arange(comm_rank, num_jobs, comm_size)

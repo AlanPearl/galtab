@@ -90,6 +90,10 @@ def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
     companions[:, 0] = np.radians(companions[:, 0])
     companions[:, 1] = np.radians(companions[:, 1])
 
+    tqdm_default_kwargs = {"smoothing": 0.15, "total": len(centers)}
+    if tqdm_kwargs is not None:
+        tqdm_kwargs = {**tqdm_default_kwargs, **tqdm_kwargs}
+
     if cosmo is not None:
         centers[:, 2] = ms.util.comoving_disth(centers[:, 2], cosmo)
         companions[:, 2] = ms.util.comoving_disth(companions[:, 2], cosmo)
@@ -124,9 +128,7 @@ def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
         _counter_init()
         iterator = centers
         if progress:
-            tqdm_kwargs = {} if tqdm_kwargs is None else tqdm_kwargs
-            iterator = tqdm.tqdm(iterator, smoothing=0.15,
-                                 **tqdm_kwargs)
+            iterator = tqdm.tqdm(iterator, **tqdm_kwargs)
         cnts = [_counter(point) for point in iterator]
     else:
         with pool_class(*pool_args, **pool_kwargs) as pool:
@@ -141,8 +143,8 @@ def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
             else:
                 iterator = pool.imap(_counter, centers)
                 if progress:
-                    iterator = tqdm.tqdm(iterator, total=len(centers),
-                                         smoothing=0.15)
+
+                    iterator = tqdm.tqdm(iterator, **tqdm_kwargs)
                 cnts = list(iterator)
 
     # TODO: Move this into the multiprocessing Finalizer registry
