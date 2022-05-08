@@ -1,6 +1,5 @@
 import numpy as np
 import fast3tree
-import mocksurvey as ms
 import tqdm
 import multiprocessing
 from mpi4py import MPI
@@ -95,8 +94,10 @@ def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
         tqdm_kwargs = {**tqdm_default_kwargs, **tqdm_kwargs}
 
     if cosmo is not None:
-        centers[:, 2] = ms.util.comoving_disth(centers[:, 2], cosmo)
-        companions[:, 2] = ms.util.comoving_disth(companions[:, 2], cosmo)
+        centers[:, 2] = cosmo.comoving_distance(
+            centers[:, 2]).value * cosmo.h
+        companions[:, 2] = cosmo.comoving_distance(
+            companions[:, 2]).value * cosmo.h
 
     _global_counter_args = (
         companions, r_cyl, cyl_half_length, weigh_companions,
