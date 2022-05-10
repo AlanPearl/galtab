@@ -2,7 +2,6 @@ import os
 import argparse
 
 import numpy as np
-from mpi4py import MPI
 from astropy.io import fits
 import astropy.cosmology
 import tqdm
@@ -10,6 +9,14 @@ import tqdm
 import galtab.obs
 from galtab.paper2 import desi_sv3_pointings
 
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+comm_size = comm.Get_size()
+comm_rank = comm.Get_rank()
+
+cosmo = astropy.cosmology.Planck13
+proj_search_radius = 2.0
+cylinder_half_length = 10.0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="count_desi_randoms")
@@ -25,7 +32,11 @@ if __name__ == "__main__":
         help="Show progress with tqdm")
     parser.add_argument(
         "-f", "--first-n", type=int, default=None, metavar="N",
-        help="Run this code on the first N data only")
+        help="Run this code only on the first N data per region")
+    parser.add_argument(
+        "-r", "--first-regions", type=int, default=None, metavar="N",
+        help="Run this code only on the first N regions"
+    )
     parser.add_argument(
         "--rand-dir", type=str, default="/home/alan/data/DESI/SV3/rands_fuji/",
         help="Directory containing the randoms (rancomb_... files)")
@@ -41,74 +52,72 @@ if __name__ == "__main__":
     make_small_region_cut = a.small_region
     progress = a.progress
     first_n = a.first_n
+    first_regions = a.first_regions
     rand_dir = a.rand_dir
     data_dir = a.data_dir
     num_rand_files = a.num_rand_files
 
-    comm = MPI.COMM_WORLD
-    comm_size = comm.Get_size()
-    comm_rank = comm.Get_rank()
     if comm_rank != 0:
         progress = False
 
     # Load in DESI data and corresponding randoms
     # ===========================================
-    rand_cats = []
-    for i in range(num_rand_files):
+    def load_data_and_rands(region_index):
+        rand_cats = []
+        for i in range(num_rand_files):
 
-        randfile = os.path.join(
-            rand_dir, f"rancomb_{i}brightwdupspec_Alltiles.fits")
-        rands = fits.open(randfile)[1].data
+            randfile = os.path.join(
+                rand_dir, f"rancomb_{i}brightwdupspec_Alltiles.fits")
+            rands = fits.open(randfile)[1].data
 
-        randcut = rands["ZWARN"] == 0
+            randcut = rands["ZWARN"] == 0
+            if make_small_region_cut:
+                randcut &= (233 < rands["RA"]) & (rands["RA"] < 238.5)
+                randcut &= (41.5 < rands["DEC"]) & (rands["DEC"] < 45.3)
+
+            rands = rands[randcut]
+            rand_cats.append(rands)
+        rands = np.concatenate(rand_cats)
+
+        datafile = os.path.join(
+            data_dir, "stellar_mass_specz_ztile-sv3-bright-cumulative.fits")
+        data = fits.open(datafile)[1].data
+
+        datacut = data["ZWARN"] == 0
+        datacut &= data["Z"] > 0
         if make_small_region_cut:
-            randcut &= (233 < rands["RA"]) & (rands["RA"] < 238.5)
-            randcut &= (41.5 < rands["DEC"]) & (rands["DEC"] < 45.3)
+            datacut &= (233 < data["TARGET_RA"]) & (data["TARGET_RA"] < 238.5)
+            datacut &= (41.5 < data["TARGET_DEC"]) & (data["TARGET_DEC"] < 45.3)
 
-        rands = rands[randcut]
-        rand_cats.append(rands)
-    rands = np.concatenate(rand_cats)
+        data = data[datacut]
 
-    datafile = os.path.join(
-        data_dir, "stellar_mass_specz_ztile-sv3-bright-cumulative.fits")
-    data = fits.open(datafile)[1].data
+        data = data[desi_sv3_pointings.select_region(
+            region_index, data["TARGET_RA"], data["TARGET_DEC"])]
+        rands = rands[desi_sv3_pointings.select_region(
+            region_index, rands["RA"], rands["DEC"])]
 
-    datacut = data["ZWARN"] == 0
-    datacut &= data["Z"] > 0
-    if make_small_region_cut:
-        datacut &= (233 < data["TARGET_RA"]) & (data["TARGET_RA"] < 238.5)
-        datacut &= (41.5 < data["TARGET_DEC"]) & (data["TARGET_DEC"] < 45.3)
+        ra = data["TARGET_RA"]
+        dec = data["TARGET_DEC"]
+        dist = cosmo.comoving_distance(data["Z"]).value * cosmo.h
 
-    data = data[datacut]
+        dist_max, dist_min = np.max(dist), np.min(dist)
+        dist_center = (dist_max + dist_min) / 2
+        dist_range = (dist_max - dist_min)
 
-    proj_search_radius = 2.0
-    cylinder_half_length = 10.0
+        rand_ra = rands["RA"]
+        rand_dec = rands["DEC"]
+        rand_dist = np.full_like(rand_ra, dist_center)
 
-    cosmo = astropy.cosmology.Planck13
-    cylinder_half_length = cylinder_half_length
-    proj_search_radius = proj_search_radius
+        sample1 = np.array([ra, dec, dist]).T
+        sample2 = np.array([rand_ra, rand_dec, rand_dist]).T
 
-    ra = data["TARGET_RA"]
-    dec = data["TARGET_DEC"]
-    dist = cosmo.comoving_distance(data["Z"]).value * cosmo.h
-
-    dist_max, dist_min = np.max(dist), np.min(dist)
-    dist_center = (dist_max + dist_min)/2
-    dist_range = (dist_max - dist_min)
-
-    rand_ra = rands["RA"]
-    rand_dec = rands["DEC"]
-    rand_dist = np.full_like(rand_ra, dist_center)
-
-    sample1 = np.array([ra, dec, dist]).T
-    sample2 = np.array([rand_ra, rand_dec, rand_dist]).T
+        return sample1, sample2, dist_range
 
 
+    # Define a job for each MPI process, split into 20 sky regions
+    # ============================================================
     def job(job_index):
-        job_data = sample1[desi_sv3_pointings.select_region(
-            job_index, sample1[:, 0], sample1[:, 1])]
-        job_rands = sample2[desi_sv3_pointings.select_region(
-            job_index, sample2[:, 0], sample2[:, 1])]
+        job_data, job_rands, dist_range = load_data_and_rands(job_index)
         if first_n is not None:
             job_data = job_data[:first_n]
         rands_in_cylinders = galtab.obs.cic_obs_data(
@@ -118,6 +127,9 @@ if __name__ == "__main__":
 
 
     num_jobs = len(desi_sv3_pointings.lims)
+    if first_regions:
+        assert first_regions <= num_jobs
+        num_jobs = first_regions
     job_assignments = np.arange(comm_rank, num_jobs, comm_size)
     if progress:
         job_assignments = tqdm.tqdm(job_assignments,

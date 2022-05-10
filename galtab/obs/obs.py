@@ -118,8 +118,7 @@ def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
             pool_kwargs = dict(initializer=_counter_init,
                                globals=dict(
                                    _global_tree_xy=None,
-                                   _global_counter_args=None
-                               ))
+                                   _global_counter_args=None))
         else:
             pool_class = multiprocessing.Pool
             pool_args = (num_threads,)
