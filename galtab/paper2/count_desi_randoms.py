@@ -158,7 +158,11 @@ if __name__ == "__main__":
     for i in job_assignments:
         job_results[i] = job(i)
 
-    job_results_gathered = comm.allgather(job_results)
+    if comm_size == 1:
+        job_results_gathered = [job_results]
+    else:
+        job_results_gathered = comm.allgather(job_results)
+
     if comm_rank == 0:
         job_results_reassembled = [job_results_gathered[i % comm_size][i]
                                    for i in range(num_jobs)]
