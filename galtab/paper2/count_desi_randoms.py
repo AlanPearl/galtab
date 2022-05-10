@@ -9,11 +9,6 @@ import tqdm
 import galtab.obs
 from galtab.paper2 import desi_sv3_pointings
 
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
-comm_size = comm.Get_size()
-comm_rank = comm.Get_rank()
-
 cosmo = astropy.cosmology.Planck13
 proj_search_radius = 2.0
 cylinder_half_length = 10.0
@@ -46,6 +41,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-rand-files", type=int, default=4,
         help="Number of random catalogs to concatenate (up to 18)")
+    parser.add_argument(
+        "--force-no-mpi", action="store_true",
+        help="Prevent even attempting to import the mpi4py module")
 
     a = parser.parse_args()
     output_file = a.output
@@ -57,6 +55,15 @@ if __name__ == "__main__":
     data_dir = a.data_dir
     num_rand_files = a.num_rand_files
 
+    if a.force_no_mpi:
+        MPI, comm = None, None
+        comm_rank, comm_size = 0, 1
+    else:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        comm_rank = comm.Get_rank()
+        comm_size = comm.Get_size()
+
     if comm_rank != 0:
         progress = False
 
@@ -64,7 +71,8 @@ if __name__ == "__main__":
     # ===========================================
     def load_data_and_rands(region_index):
             preprocessed_dir = os.path.join(
-                data_dir, f"preprocess_region_{region_index}")
+                data_dir, f"preprocess_with_{num_rand_files}_rand"
+                          f"files_at_region_{region_index}")
             if not os.path.isdir(preprocessed_dir):
                 preprocess_region(region_index, preprocessed_dir)
             data = np.load(os.path.join(preprocessed_dir, "data.npy"))

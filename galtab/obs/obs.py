@@ -2,8 +2,13 @@ import numpy as np
 import fast3tree
 import tqdm
 import multiprocessing
-from mpi4py import MPI
-from mpi4py.futures import MPIPoolExecutor
+
+import_mpi = False  # I haven't gotten the MPI pool working yet.
+if import_mpi:
+    from mpi4py import MPI
+    from mpi4py.futures import MPIPoolExecutor
+else:
+    MPI, MPIPoolExecutor = None, None
 
 global _global_tree_xy, _global_counter_args
 
