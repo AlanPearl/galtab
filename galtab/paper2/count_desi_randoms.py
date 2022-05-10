@@ -63,9 +63,18 @@ if __name__ == "__main__":
     # Load in DESI data and corresponding randoms
     # ===========================================
     def load_data_and_rands(region_index):
+            preprocessed_dir = os.path.join(
+                data_dir, f"preprocess_region_{region_index}")
+            if not os.path.isdir(preprocessed_dir):
+                preprocess_region(region_index, preprocessed_dir)
+            data = np.load(os.path.join(preprocessed_dir, "data.npy"))
+            rand = np.load(os.path.join(preprocessed_dir, "rand.npy"))
+
+            return data, rand
+
+    def preprocess_region(region_index, save_dir):
         rand_cats = []
         for i in range(num_rand_files):
-
             randfile = os.path.join(
                 rand_dir, f"rancomb_{i}brightwdupspec_Alltiles.fits")
             rands = fits.open(randfile)[1].data
@@ -102,7 +111,6 @@ if __name__ == "__main__":
 
         dist_max, dist_min = np.max(dist), np.min(dist)
         dist_center = (dist_max + dist_min) / 2
-        dist_range = (dist_max - dist_min)
 
         rand_ra = rands["RA"]
         rand_dec = rands["DEC"]
@@ -111,13 +119,16 @@ if __name__ == "__main__":
         sample1 = np.array([ra, dec, dist]).T
         sample2 = np.array([rand_ra, rand_dec, rand_dist]).T
 
-        return sample1, sample2, dist_range
+        os.mkdir(save_dir)
+        np.save(os.path.join(save_dir, "data.npy"), sample1)
+        np.save(os.path.join(save_dir, "rand.npy"), sample2)
 
 
     # Define a job for each MPI process, split into 20 sky regions
     # ============================================================
     def job(job_index):
-        job_data, job_rands, dist_range = load_data_and_rands(job_index)
+        job_data, job_rands = load_data_and_rands(job_index)
+        dist_range = np.max(job_data[:, 2]) - np.min(job_data[:, 0])
         if first_n is not None:
             job_data = job_data[:first_n]
         rands_in_cylinders = galtab.obs.cic_obs_data(
