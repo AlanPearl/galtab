@@ -39,6 +39,9 @@ if __name__ == "__main__":
         "--num-rand-files", type=int, default=4,
         help="Number of random catalogs to concatenate (up to 18)")
     parser.add_argument(
+        "-n", "--num-threads", type=int, default=1,
+        help="Number of multiprocessing threads for each CiC process")
+    parser.add_argument(
         "--force-no-mpi", action="store_true",
         help="Prevent even attempting to import the mpi4py module")
 
@@ -50,6 +53,7 @@ if __name__ == "__main__":
     rand_dir = a.rand_dir
     data_dir = a.data_dir
     num_rand_files = a.num_rand_files
+    num_threads = a.num_threads
 
     if a.force_no_mpi:
         MPI, comm = None, None
@@ -130,7 +134,8 @@ if __name__ == "__main__":
             job_data = job_data[:first_n]
         rands_in_cylinders = galtab.obs.cic_obs_data(
             job_data, job_rands, proj_search_radius,
-            dist_range, progress=progress, tqdm_kwargs=dict(leave=False))
+            dist_range, progress=progress, tqdm_kwargs=dict(leave=False),
+            num_threads=num_threads)
         return rands_in_cylinders
 
 

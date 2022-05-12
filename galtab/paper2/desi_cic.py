@@ -33,14 +33,19 @@ if __name__ == "__main__":
         "--data-dir", type=str, default="/home/alan/data/DESI/SV3/",
         help="Directory containing the data (stellar_mass_specz_ztile... file)")
     parser.add_argument(
+        "-n", "--num-threads", type=int, default=1,
+        help="Number of multiprocessing threads for each CiC process")
+    parser.add_argument(
         "--force-no-mpi", action="store_true",
         help="Prevent even attempting to import the mpi4py module")
     parser.add_argument(
         "--zmax", type=float, default=0.25,
-        help="Upper limit on redshift of the sample")
+        help="Upper limit on redshift of the sample\n"
+             "(MUST DELETE PREPROCESSED FOLDERS IN DATA_DIR BEFORE CHANGING THIS PARAMETER)")
     parser.add_argument(
         "--logmmin", type=float, default=9.9,
-        help="Lower limit on log stellar mass of the sample")
+        help="Lower limit on log stellar mass of the sample\n"
+             "(MUST DELETE PREPROCESSED FOLDERS IN DATA_DIR BEFORE CHANGING THIS PARAMETER)")
 
     a = parser.parse_args()
     output_file = a.output
@@ -50,6 +55,7 @@ if __name__ == "__main__":
     data_dir = a.data_dir
     zmax = a.zmax
     logmmin = a.logmmin
+    num_threads = a.num_threads
 
     if a.force_no_mpi:
         MPI, comm = None, None
@@ -111,7 +117,8 @@ if __name__ == "__main__":
             centers = data[:first_n]
         rands_in_cylinders = galtab.obs.cic_obs_data(
             centers, data, proj_search_radius, cylinder_half_length,
-            progress=progress, tqdm_kwargs=dict(leave=False))
+            progress=progress, tqdm_kwargs=dict(leave=False),
+            num_threads=num_threads)
         return rands_in_cylinders
 
 

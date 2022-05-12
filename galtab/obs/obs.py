@@ -53,10 +53,12 @@ def _counter_init():
 
 def _counter_exit():
     global _global_tree_xy, _global_counter_args
-    _global_tree_xy.free()
-    _global_tree_xy = None
-    _global_counter_args = None
-    return _global_tree_xy, _global_counter_args
+    try:
+        _global_tree_xy.free()
+        _global_tree_xy = None
+        _global_counter_args = None
+    except NameError:
+        pass
 
 
 def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
