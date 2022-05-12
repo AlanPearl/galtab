@@ -17,7 +17,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="count_desi_randoms")
     parser.formatter_class = argparse.ArgumentDefaultsHelpFormatter
     parser.add_argument(
-        "-o", "--output", type=str, default="desi_rand_counts.npy",
+        "-o", "--output", type=str, default="desi_cic.npy",
         help="Specify the output filename")
     parser.add_argument(
         "-p", "--progress", action="store_true",
@@ -30,26 +30,26 @@ if __name__ == "__main__":
         help="Run this code only on the first N regions"
     )
     parser.add_argument(
-        "--rand-dir", type=str, default="/home/alan/data/DESI/SV3/rands_fuji/",
-        help="Directory containing the randoms (rancomb_... files)")
-    parser.add_argument(
         "--data-dir", type=str, default="/home/alan/data/DESI/SV3/",
         help="Directory containing the data (stellar_mass_specz_ztile... file)")
     parser.add_argument(
-        "--num-rand-files", type=int, default=4,
-        help="Number of random catalogs to concatenate (up to 18)")
-    parser.add_argument(
         "--force-no-mpi", action="store_true",
         help="Prevent even attempting to import the mpi4py module")
+    parser.add_argument(
+        "--zmax", type=float, default=0.25,
+        help="Upper limit on redshift of the sample")
+    parser.add_argument(
+        "--logmmin", type=float, default=9.9,
+        help="Lower limit on log stellar mass of the sample")
 
     a = parser.parse_args()
     output_file = a.output
     progress = a.progress
     first_n = a.first_n
     first_regions = a.first_regions
-    rand_dir = a.rand_dir
     data_dir = a.data_dir
-    num_rand_files = a.num_rand_files
+    zmax = a.zmax
+    logmmin = a.logmmin
 
     if a.force_no_mpi:
         MPI, comm = None, None
@@ -66,29 +66,15 @@ if __name__ == "__main__":
     def load_data_and_rands(region_index):
         """Load in DESI data and corresponding randoms"""
         preprocessed_dir = os.path.join(
-            data_dir, f"preprocess_with_{num_rand_files}_rand"
-                      f"files_at_region_{region_index}")
+            data_dir, f"preprocess_cicdata_region_{region_index}")
         if not os.path.isdir(preprocessed_dir):
             preprocess_region(region_index, preprocessed_dir)
         data = np.load(os.path.join(preprocessed_dir, "data.npy"))
-        rand = np.load(os.path.join(preprocessed_dir, "rand.npy"))
 
-        return data, rand
+        return data
 
     def preprocess_region(region_index, save_dir):
         """Save only the data used for the analysis in a given region"""
-        rand_cats = []
-        for i in range(num_rand_files):
-            randfile = os.path.join(
-                rand_dir, f"rancomb_{i}brightwdupspec_Alltiles.fits")
-            rands = fits.open(randfile)[1].data
-
-            randcut = rands["ZWARN"] == 0
-
-            rands = rands[randcut]
-            rand_cats.append(rands)
-        rands = np.concatenate(rand_cats)
-
         datafile = os.path.join(
             data_dir, "stellar_mass_specz_ztile-sv3-bright-cumulative.fits")
         data = fits.open(datafile)[1].data
@@ -96,41 +82,36 @@ if __name__ == "__main__":
         datacut = data["ZWARN"] == 0
         datacut &= data["Z"] > 0
 
+        # Additional cuts here: logm > logmmin and z < zmax
+        # =================================================
+        datacut &= data["Z"] <= zmax
+        datacut &= data["logmass"] >= logmmin
+        # =================================================
+
         data = data[datacut]
 
         data = data[desi_sv3_pointings.select_region(
             region_index, data["TARGET_RA"], data["TARGET_DEC"])]
-        rands = rands[desi_sv3_pointings.select_region(
-            region_index, rands["RA"], rands["DEC"])]
 
         ra = data["TARGET_RA"]
         dec = data["TARGET_DEC"]
         dist = cosmo.comoving_distance(data["Z"]).value * cosmo.h
 
-        dist_max, dist_min = np.max(dist), np.min(dist)
-        dist_center = (dist_max + dist_min) / 2
-
-        rand_ra = rands["RA"]
-        rand_dec = rands["DEC"]
-        rand_dist = np.full_like(rand_ra, dist_center)
-
         sample1 = np.array([ra, dec, dist]).T
-        sample2 = np.array([rand_ra, rand_dec, rand_dist]).T
 
         os.mkdir(save_dir)
         np.save(os.path.join(save_dir, "data.npy"), sample1)
-        np.save(os.path.join(save_dir, "rand.npy"), sample2)
 
 
     def job(job_index):
         """Define a job for each MPI process, split into 20 sky regions"""
-        job_data, job_rands = load_data_and_rands(job_index)
-        dist_range = np.max(job_data[:, 2]) - np.min(job_data[:, 0])
+        data = load_data_and_rands(job_index)
+        centers = data
         if first_n is not None:
-            job_data = job_data[:first_n]
+            centers = data[:first_n]
         rands_in_cylinders = galtab.obs.cic_obs_data(
-            job_data, job_rands, proj_search_radius,
-            dist_range, progress=progress, tqdm_kwargs=dict(leave=False))
+            centers, data, proj_search_radius, cylinder_half_length,
+            progress=progress, tqdm_kwargs=dict(leave=False))
         return rands_in_cylinders
 
 
