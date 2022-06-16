@@ -25,7 +25,8 @@ def _counter(pt):
         pt_dist = pt[2] - cyl_half_length
     else:
         pt_dist = pt[2]
-    ang_radius = r_cyl / pt_dist  # radians
+    # ang_radius = r_cyl / pt_dist
+    ang_radius = get_search_angle(r_cyl, cyl_half_length, pt_dist)
     idx_xy = tree_xy.query_radius(pt[:2], ang_radius / np.cos(pt[1]))
     cnt = 0
     for j in idx_xy:
@@ -97,8 +98,9 @@ def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
     companions[:, 1] = np.radians(companions[:, 1])
 
     tqdm_default_kwargs = {"smoothing": 0.15, "total": len(centers)}
-    if tqdm_kwargs is not None:
-        tqdm_kwargs = {**tqdm_default_kwargs, **tqdm_kwargs}
+    if tqdm_kwargs is None:
+        tqdm_kwargs = {}
+    tqdm_kwargs = {**tqdm_default_kwargs, **tqdm_kwargs}
 
     if cosmo is not None:
         centers[:, 2] = cosmo.comoving_distance(
@@ -164,3 +166,10 @@ def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
     # To remove self-counting, subtract count_weights * companion_weights[center_indices]
     # In the case of no weights, simply subtract 1
     return cnts
+
+
+def get_search_angle(r_cyl, cyl_half_length, point_dist):
+    """Calculate the search angle in radians"""
+    # volume = 2*pi*r_cyl^2*cyl_half_length = 2/3*pi*(1-cos(search_angle))*diff_r3
+    diff_r3 = (point_dist + cyl_half_length)**3 - (point_dist - cyl_half_length)**3
+    return np.arccos(1 - 3 * r_cyl**2 * cyl_half_length / diff_r3)

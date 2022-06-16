@@ -63,7 +63,7 @@ wp_mask = slice(1, 13)
 cic_mask = slice(13, None)
 not_cic_mask = slice(None, 13)
 
-pimax = 60.0
+pimax = 40.0
 proj_search_radius = 2.0
 cylinder_half_length = 10.0
 # This corresponds to 1000 km/s at z=0 (Kuan used 10 Mpc/h)
