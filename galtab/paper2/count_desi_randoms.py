@@ -129,14 +129,13 @@ if __name__ == "__main__":
     def job(job_index):
         """Define a job for each MPI process, split into 20 sky regions"""
         job_data, job_rands = load_data_and_rands(job_index)
-        dist_range = np.max(job_data[:, 2]) - np.min(job_data[:, 0])
         leave = len(job_assignments) < 2
         if first_n is not None:
             job_data = job_data[:first_n]
         rands_in_cylinders = galtab.obs.cic_obs_data(
             job_data, job_rands, proj_search_radius,
-            dist_range, progress=progress, tqdm_kwargs=dict(leave=leave),
-            num_threads=num_threads)
+            cylinder_half_length, progress=progress, tqdm_kwargs=dict(leave=leave),
+            num_threads=num_threads, infinite_distance=True)
         return rands_in_cylinders
 
 
@@ -163,6 +162,7 @@ if __name__ == "__main__":
                                    for i in range(num_jobs)]
         results = np.array(job_results_reassembled, dtype=object)
 
-        # search_angles = (proj_search_radius / (dist - cylinder_half_length)) * 180 / np.pi
+        # search_angles = galtab.obs.get_search_angle(
+        #     proj_search_radius, cylinder_half_length, dist)
         # rand_density_in_cylinders = rands_in_cylinders / (np.pi * search_angles**2)
         np.save(output_file, results)

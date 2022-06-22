@@ -17,7 +17,7 @@ def _counter(pt):
     global _global_tree_xy, _global_counter_args
     tree_xy = _global_tree_xy
     (companions, r_cyl, cyl_half_length, weigh_companions, companion_weights,
-     search_angle_at_near_end_of_cylinder,
+     infinite_distance, search_angle_at_near_end_of_cylinder,
      perform_additional_angle_selection_at_companion_dist
      ) = _global_counter_args
 
@@ -32,9 +32,11 @@ def _counter(pt):
     for j in idx_xy:
         if perform_additional_angle_selection_at_companion_dist:
             ang_radius = r_cyl / companions[j, 2]
-        if (np.abs(pt[2] - companions[j, 2]) < cyl_half_length and
-           ((pt[0] - companions[j, 0]) * np.cos(pt[1])) ** 2 +
-           (pt[1] - companions[j, 1]) ** 2 < ang_radius ** 2):
+        dist_check = True
+        if not infinite_distance:
+            dist_check = np.abs(pt[2] - companions[j, 2]) < cyl_half_length
+        if dist_check and (((pt[0] - companions[j, 0]) * np.cos(pt[1])) ** 2 +
+                           (pt[1] - companions[j, 1]) ** 2 < ang_radius ** 2):
             # and not np.allclose(pt, self.companions[j], 0, 1e-7)):
             if weigh_companions:
                 cnt += companion_weights[j]
@@ -65,6 +67,7 @@ def _counter_exit():
 def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
                  weigh_companions=False, companion_weights=None,
                  weigh_counts=False, count_weights=None, progress=False,
+                 infinite_distance=False,
                  search_angle_at_near_end_of_cylinder=False,
                  perform_additional_angle_selection_at_companion_dist=False,
                  num_threads=1, use_mpi=False, tqdm_kwargs=None):
@@ -110,7 +113,8 @@ def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
 
     _global_counter_args = (
         companions, r_cyl, cyl_half_length, weigh_companions,
-        companion_weights, search_angle_at_near_end_of_cylinder,
+        companion_weights, infinite_distance,
+        search_angle_at_near_end_of_cylinder,
         perform_additional_angle_selection_at_companion_dist)
 
     pool_class = pool_args = pool_kwargs = None
