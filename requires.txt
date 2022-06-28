@@ -7,3 +7,4 @@ astropy
 tqdm
 fast3tree
 mpi4py
+pathlib

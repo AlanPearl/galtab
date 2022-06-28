@@ -5,6 +5,7 @@ import numpy as np
 from astropy.io import fits
 import astropy.cosmology
 import tqdm
+import pathlib
 
 import galtab.obs
 from galtab.paper2 import desi_sv3_pointings
@@ -14,7 +15,7 @@ proj_search_radius = 2.0
 cylinder_half_length = 10.0
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(prog="count_desi_randoms")
+    parser = argparse.ArgumentParser(prog="desi_cic")
     parser.formatter_class = argparse.ArgumentDefaultsHelpFormatter
     parser.add_argument(
         "-o", "--output", type=str, default="desi_cic.npy",
@@ -30,7 +31,8 @@ if __name__ == "__main__":
         help="Run this code only on the first N regions"
     )
     parser.add_argument(
-        "--data-dir", type=str, default="/home/alan/data/DESI/SV3/",
+        "--data-dir", type=str,
+        default=pathlib.Path.home() / "data" / "DESI" / "SV3",
         help="Directory containing the data (stellar_mass_specz_ztile... file)")
     parser.add_argument(
         "-n", "--num-threads", type=int, default=1,
@@ -39,13 +41,11 @@ if __name__ == "__main__":
         "--force-no-mpi", action="store_true",
         help="Prevent even attempting to import the mpi4py module")
     parser.add_argument(
-        "--zmax", type=float, default=0.25,
-        help="Upper limit on redshift of the sample\n"
-             "(MUST DELETE PREPROCESSED FOLDERS IN DATA_DIR BEFORE CHANGING THIS PARAMETER)")
+        "--zmax", type=float, default=0.3,
+        help="Upper limit on redshift of the sample")
     parser.add_argument(
         "--logmmin", type=float, default=9.9,
-        help="Lower limit on log stellar mass of the sample\n"
-             "(MUST DELETE PREPROCESSED FOLDERS IN DATA_DIR BEFORE CHANGING THIS PARAMETER)")
+        help="Lower limit on log stellar mass of the sample")
 
     a = parser.parse_args()
     output_file = a.output
@@ -69,17 +69,7 @@ if __name__ == "__main__":
     if comm_rank != 0:
         progress = False
 
-    def load_data_and_rands(region_index):
-        """Load in DESI data and corresponding randoms"""
-        preprocessed_dir = os.path.join(
-            data_dir, f"preprocess_cicdata_region_{region_index}")
-        if not os.path.isdir(preprocessed_dir):
-            preprocess_region(region_index, preprocessed_dir)
-        data = np.load(os.path.join(preprocessed_dir, "data.npy"))
-
-        return data
-
-    def preprocess_region(region_index, save_dir):
+    def load_data(region_index):
         """Save only the data used for the analysis in a given region"""
         datafile = os.path.join(
             data_dir, "stellar_mass_specz_ztile-sv3-bright-cumulative.fits")
@@ -103,23 +93,19 @@ if __name__ == "__main__":
         dec = data["TARGET_DEC"]
         dist = cosmo.comoving_distance(data["Z"]).value * cosmo.h
 
-        sample1 = np.array([ra, dec, dist]).T
-
-        os.mkdir(save_dir)
-        np.save(os.path.join(save_dir, "data.npy"), sample1)
+        return np.array([ra, dec, dist]).T
 
 
     def job(job_index):
         """Define a job for each MPI process, split into 20 sky regions"""
-        data = load_data_and_rands(job_index)
-        centers = data
+        sample1 = sample2 = load_data(job_index)
         if first_n is not None:
-            centers = data[:first_n]
-        rands_in_cylinders = galtab.obs.cic_obs_data(
-            centers, data, proj_search_radius, cylinder_half_length,
+            sample1 = sample1[:first_n]
+        cic = galtab.obs.cic_obs_data(
+            sample1, sample2, proj_search_radius, cylinder_half_length,
             progress=progress, tqdm_kwargs=dict(leave=False),
             num_threads=num_threads)
-        return rands_in_cylinders
+        return cic
 
 
     num_jobs = len(desi_sv3_pointings.lims)

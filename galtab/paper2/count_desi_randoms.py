@@ -5,6 +5,7 @@ import numpy as np
 from astropy.io import fits
 import astropy.cosmology
 import tqdm
+import pathlib
 
 import galtab.obs
 from galtab.paper2 import desi_sv3_pointings
@@ -30,10 +31,12 @@ if __name__ == "__main__":
         help="Run this code only on the first N regions"
     )
     parser.add_argument(
-        "--rand-dir", type=str, default="/home/alan/data/DESI/SV3/rands_fuji/",
+        "--rand-dir", type=str,
+        default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "rands_fuji",
         help="Directory containing the randoms (rancomb_... files)")
     parser.add_argument(
-        "--data-dir", type=str, default="/home/alan/data/DESI/SV3/",
+        "--data-dir", type=str,
+        default=pathlib.Path.home() / "data" / "DESI" / "SV3",
         help="Directory containing the data (stellar_mass_specz_ztile... file)")
     parser.add_argument(
         "--num-rand-files", type=int, default=4,

@@ -40,7 +40,8 @@ setup(name="galtab",
           "astropy",
           "tqdm",
           "fast3tree",
-          "mpi4py"
+          "mpi4py",
+          "pathlib"
       ],
       zip_safe=True,
       test_suite="nose.collector",
