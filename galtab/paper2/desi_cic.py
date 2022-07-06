@@ -46,6 +46,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--logmmin", type=float, default=9.9,
         help="Lower limit on log stellar mass of the sample")
+    parser.add_argument(
+        "--abs-mr-max", type=float, default=-np.inf,
+        help="Upper limit on absolute R-mand magnitude (e.g. -19.5)",
+    )
 
     a = parser.parse_args()
     output_file = a.output
@@ -55,6 +59,7 @@ if __name__ == "__main__":
     data_dir = a.data_dir
     zmax = a.zmax
     logmmin = a.logmmin
+    abs_mr_max = a.abs_mr_max
     num_threads = a.num_threads
 
     if a.force_no_mpi:
@@ -78,10 +83,14 @@ if __name__ == "__main__":
         datacut = data["ZWARN"] == 0
         datacut &= data["Z"] > 0
 
-        # Additional cuts here: logm > logmmin and z < zmax
-        # =================================================
+        # Additional cuts here: logm > logmmin, z < zmax, magnitude cut
+        # =============================================================
         datacut &= data["Z"] <= zmax
         datacut &= data["logmass"] >= logmmin
+        if abs_mr_max > -np.inf:
+            disth = cosmo.comoving_distance(data["Z"]).value * cosmo.h
+            abs_mr = data["rmag"] - 5*np.log10(disth * 1e5)
+            datacut &= abs_mr <= abs_mr_max
         # =================================================
 
         data = data[datacut]
