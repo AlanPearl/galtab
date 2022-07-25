@@ -47,8 +47,12 @@ if __name__ == "__main__":
         "--logmmin", type=float, default=9.9,
         help="Lower limit on log stellar mass of the sample")
     parser.add_argument(
-        "--abs-mr-max", type=float, default=-np.inf,
+        "--abs-mr-max", type=float, default=np.inf,
         help="Upper limit on absolute R-mand magnitude (e.g. -19.5)",
+    )
+    parser.add_argument(
+        "--use-fastphot", action="store_true",
+        help="Use the fastphot catalogs for k-corrected M_R values"
     )
 
     a = parser.parse_args()
@@ -61,6 +65,7 @@ if __name__ == "__main__":
     logmmin = a.logmmin
     abs_mr_max = a.abs_mr_max
     num_threads = a.num_threads
+    use_fastphot = a.use_fastphot
 
     if a.force_no_mpi:
         MPI, comm = None, None
@@ -76,30 +81,48 @@ if __name__ == "__main__":
 
     def load_data(region_index):
         """Save only the data used for the analysis in a given region"""
-        datafile = os.path.join(
-            data_dir, "stellar_mass_specz_ztile-sv3-bright-cumulative.fits")
-        data = fits.open(datafile)[1].data
+        if use_fastphot:
+            datafile = os.path.join(
+                data_dir, "fastphot-everest-sv3-bright.fits")
+            data = fits.open(datafile)[2].data
+
+            fastphot = fits.open(datafile)[1].data
+            abs_mr = fastphot["ABSMAG_SDSS_R"] - fastphot["KCORR_SDSS_R"]
+            del fastphot
+        else:
+            datafile = os.path.join(
+                data_dir, "stellar_mass_specz_ztile-sv3-bright-cumulative.fits")
+            data = fits.open(datafile)[1].data
+            abs_mr = None
+            if abs_mr_max < np.inf:
+                disth = cosmo.comoving_distance(data["Z"]).value * cosmo.h
+                abs_mr = data["rmag"] - 5 * np.log10(disth * 1e5)
 
         datacut = data["ZWARN"] == 0
         datacut &= data["Z"] > 0
+        datacut &= data["SPECTYPE"] == "GALAXY"
+        datacut &= data["DELTACHI2"] > 25
 
         # Additional cuts here: logm > logmmin, z < zmax, magnitude cut
         # =============================================================
         datacut &= data["Z"] <= zmax
-        datacut &= data["logmass"] >= logmmin
-        if abs_mr_max > -np.inf:
-            disth = cosmo.comoving_distance(data["Z"]).value * cosmo.h
-            abs_mr = data["rmag"] - 5*np.log10(disth * 1e5)
+        if logmmin > -np.inf:
+            datacut &= data["logmass"] >= logmmin
+        if abs_mr_max < np.inf:
             datacut &= abs_mr <= abs_mr_max
         # =================================================
 
         data = data[datacut]
 
+        if use_fastphot:
+            rakey, deckey = "RA", "DEC"
+        else:
+            rakey, deckey = "TARGET_RA", "TARGET_DEC"
         data = data[desi_sv3_pointings.select_region(
-            region_index, data["TARGET_RA"], data["TARGET_DEC"])]
+            region_index, data[rakey], data[deckey])]
 
-        ra = data["TARGET_RA"]
-        dec = data["TARGET_DEC"]
+        ra = data[rakey]
+        dec = data[deckey]
         dist = cosmo.comoving_distance(data["Z"]).value * cosmo.h
 
         return np.array([ra, dec, dist]).T
