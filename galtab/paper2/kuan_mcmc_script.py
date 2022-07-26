@@ -11,6 +11,8 @@ import halotools.sim_manager as htsm
 
 import mocksurvey as ms
 import galtab
+from .param_config import pimax, proj_search_radius, cylinder_half_length, \
+    rp_edges, cic_edges, cic_kmax
 
 # Make sure Corrfunc is installed, or else this will run VERY slow
 assert ms.cf.corrfunc_works
@@ -62,19 +64,11 @@ n_mask = slice(0, 1)
 wp_mask = slice(1, 13)
 cic_mask = slice(13, None)
 not_cic_mask = slice(None, 13)
-
-pimax = 40.0
-proj_search_radius = 2.0
-cylinder_half_length = 10.0
 # This corresponds to 1000 km/s at z=0 (Kuan used 10 Mpc/h)
 # =========================================================
 
-rp_edges = np.logspace(-0.8, 1.6, 13)
 rp_cens = np.sqrt(rp_edges[:-1] * rp_edges[1:])
-cic_edges = np.concatenate([np.arange(-0.5, 9),
-                            np.round(np.geomspace(10, 150, 20)) - 0.5])
 cic_cens = 0.5 * (cic_edges[:-1] + cic_edges[1:])
-cic_kmax = 5
 cic_num_obs = np.sum(obs_val[cic_mask] != 0) if full_cic_distribution else cic_kmax
 cic_bin_inds = np.repeat(np.arange(cic_num_obs),
                          np.diff(cic_edges[:cic_num_obs+1]).astype(int))

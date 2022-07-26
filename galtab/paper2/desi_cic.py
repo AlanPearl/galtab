@@ -3,16 +3,13 @@ import argparse
 
 import numpy as np
 from astropy.io import fits
-import astropy.cosmology
 import tqdm
 import pathlib
 
 import galtab.obs
 from galtab.paper2 import desi_sv3_pointings
+from .param_config import cosmo, proj_search_radius, cylinder_half_length
 
-cosmo = astropy.cosmology.Planck13
-proj_search_radius = 2.0
-cylinder_half_length = 10.0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="desi_cic")

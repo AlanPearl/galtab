@@ -2,17 +2,13 @@ import os
 import argparse
 
 import numpy as np
-from astropy.io import fits
-import astropy.cosmology
 import tqdm
 import pathlib
 
 import galtab.obs
 from galtab.paper2 import desi_sv3_pointings
+from .param_config import cosmo, proj_search_radius, cylinder_half_length
 
-cosmo = astropy.cosmology.Planck13
-proj_search_radius = 2.0
-cylinder_half_length = 10.0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="count_desi_randoms")
@@ -32,31 +28,31 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--rand-dir", type=str,
-        default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "rands_fuji",
+        default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean" / "rands_fuji",
         help="Directory containing the randoms (rancomb_... files)")
     parser.add_argument(
         "--data-dir", type=str,
-        default=pathlib.Path.home() / "data" / "DESI" / "SV3",
+        default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean",
         help="Directory containing the data (stellar_mass_specz_ztile... file)")
-    parser.add_argument(
-        "--num-rand-files", type=int, default=4,
-        help="Number of random catalogs to concatenate (up to 18)")
     parser.add_argument(
         "-n", "--num-threads", type=int, default=1,
         help="Number of multiprocessing threads for each CiC process")
     parser.add_argument(
         "--force-no-mpi", action="store_true",
         help="Prevent even attempting to import the mpi4py module")
+    parser.add_argument(
+        "--preprocess-only", action="store_true",
+        help="End the program after saving preprocessed data")
 
     a = parser.parse_args()
     output_file = a.output
     progress = a.progress
     first_n = a.first_n
     first_regions = a.first_regions
-    rand_dir = a.rand_dir
-    data_dir = a.data_dir
-    num_rand_files = a.num_rand_files
+    rand_dir = pathlib.Path(a.rand_dir)
+    data_dir = pathlib.Path(a.data_dir)
     num_threads = a.num_threads
+    preprocess_only = a.preprocess_only
 
     if a.force_no_mpi:
         MPI, comm = None, None
@@ -73,8 +69,7 @@ if __name__ == "__main__":
     def load_data_and_rands(region_index):
         """Load in DESI data and corresponding randoms"""
         preprocessed_dir = os.path.join(
-            data_dir, f"preprocess_with_{num_rand_files}_rand"
-                      f"files_at_region_{region_index}")
+            data_dir, f"preprocess_region_{region_index}_files")
         if not os.path.isdir(preprocessed_dir):
             preprocess_region(region_index, preprocessed_dir)
         data = np.load(os.path.join(preprocessed_dir, "data.npy"))
@@ -84,26 +79,8 @@ if __name__ == "__main__":
 
     def preprocess_region(region_index, save_dir):
         """Save only the data used for the analysis in a given region"""
-        rand_cats = []
-        for i in range(num_rand_files):
-            randfile = os.path.join(
-                rand_dir, f"rancomb_{i}brightwdupspec_Alltiles.fits")
-            rands = fits.open(randfile)[1].data
-
-            randcut = rands["ZWARN"] == 0
-
-            rands = rands[randcut]
-            rand_cats.append(rands)
-        rands = np.concatenate(rand_cats)
-
-        datafile = os.path.join(
-            data_dir, "stellar_mass_specz_ztile-sv3-bright-cumulative.fits")
-        data = fits.open(datafile)[1].data
-
-        datacut = data["ZWARN"] == 0
-        datacut &= data["Z"] > 0
-
-        data = data[datacut]
+        rands = np.load(str(rand_dir / "rands.npy"))
+        data = np.load(str(data_dir / "biprateep_masses.npy"))
 
         data = data[desi_sv3_pointings.select_region(
             region_index, data["TARGET_RA"], data["TARGET_DEC"])]
@@ -132,6 +109,9 @@ if __name__ == "__main__":
     def job(job_index):
         """Define a job for each MPI process, split into 20 sky regions"""
         job_data, job_rands = load_data_and_rands(job_index)
+        if preprocess_only:
+            return
+
         leave = len(job_assignments) < 2
         if first_n is not None:
             job_data = job_data[:first_n]
@@ -160,7 +140,7 @@ if __name__ == "__main__":
     else:
         job_results_gathered = comm.allgather(job_results)
 
-    if comm_rank == 0:
+    if comm_rank == 0 and not preprocess_only:
         job_results_reassembled = [job_results_gathered[i % comm_size][i]
                                    for i in range(num_jobs)]
         results = np.array(job_results_reassembled, dtype=object)
