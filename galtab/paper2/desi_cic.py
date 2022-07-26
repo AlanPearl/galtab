@@ -1,8 +1,6 @@
-import os
 import argparse
 
 import numpy as np
-from astropy.io import fits
 import tqdm
 import pathlib
 
@@ -79,47 +77,29 @@ if __name__ == "__main__":
     def load_data(region_index):
         """Save only the data used for the analysis in a given region"""
         if use_fastphot:
-            datafile = os.path.join(
-                data_dir, "fastphot-everest-sv3-bright.fits")
-            data = fits.open(datafile)[2].data
-
-            fastphot = fits.open(datafile)[1].data
-            abs_mr = fastphot["ABSMAG_SDSS_R"] - fastphot["KCORR_SDSS_R"]
-            del fastphot
+            data = np.load(str(data_dir / "fastphot.npy"))
+            abs_mr = data["abs_rmag_rest"]
         else:
-            datafile = os.path.join(
-                data_dir, "stellar_mass_specz_ztile-sv3-bright-cumulative.fits")
-            data = fits.open(datafile)[1].data
+            data = np.load(str(data_dir / "biprateep_masses.npy"))
             abs_mr = None
             if abs_mr_max < np.inf:
                 disth = cosmo.comoving_distance(data["Z"]).value * cosmo.h
                 abs_mr = data["rmag"] - 5 * np.log10(disth * 1e5)
 
-        datacut = data["ZWARN"] == 0
-        datacut &= data["Z"] > 0
-        datacut &= data["SPECTYPE"] == "GALAXY"
-        datacut &= data["DELTACHI2"] > 25
-
-        # Additional cuts here: logm > logmmin, z < zmax, magnitude cut
-        # =============================================================
-        datacut &= data["Z"] <= zmax
+        # Threshold cuts here: logm > logmmin, z < zmax, magnitude cut
+        datacut = data["Z"] <= zmax
         if logmmin > -np.inf:
             datacut &= data["logmass"] >= logmmin
         if abs_mr_max < np.inf:
             datacut &= abs_mr <= abs_mr_max
-        # =================================================
 
         data = data[datacut]
 
-        if use_fastphot:
-            rakey, deckey = "RA", "DEC"
-        else:
-            rakey, deckey = "TARGET_RA", "TARGET_DEC"
         data = data[desi_sv3_pointings.select_region(
-            region_index, data[rakey], data[deckey])]
+            region_index, data["TARGET_RA"], data["TARGET_DEC"])]
 
-        ra = data[rakey]
-        dec = data[deckey]
+        ra = data["TARGET_RA"]
+        dec = data["TARGET_DEC"]
         dist = cosmo.comoving_distance(data["Z"]).value * cosmo.h
 
         return np.array([ra, dec, dist]).T
