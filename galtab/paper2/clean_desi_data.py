@@ -12,35 +12,11 @@ import mocksurvey as ms
 
 def clean_data():
     fastphot_filename = "fastphot-everest-sv3-bright.fits"
-    desi_filename = "stellar_mass_specz_ztile-sv3-bright-cumulative.fits"
+    biprateep_filename = "stellar_mass_specz_ztile-sv3-bright-cumulative.fits"
 
     meta = fits.open(data_dir / fastphot_filename)[2].data
     fastphot = fits.open(data_dir / fastphot_filename)[1].data
-    desi = fits.open(data_dir / desi_filename)[1].data
-
-    abs_rmag_rest = fastphot["ABSMAG_SDSS_R"] - fastphot["KCORR_SDSS_R"]
-
-    # Put abs rest magnitudes into the fastphot (meta) catalog
-    # ========================================================
-    names = list(meta.dtype.names) + ["abs_rmag_rest"]
-    values = [meta[name] for name in meta.dtype.names] + [abs_rmag_rest]
-    dtypes = [x[1] for x in meta.dtype.descr] + [abs_rmag_rest.dtype.descr[0][1]]
-    subshapes = [value.shape[1:] for value in values]
-    names[names.index("RA")] = "TARGET_RA"
-    names[names.index("DEC")] = "TARGET_DEC"
-    meta = ms.util.make_struc_array(names, values, dtypes, subshapes)
-
-    del fastphot
-    del abs_rmag_rest
-
-    # Remove bad data
-    # ===============
-    meta_cut = ((meta["ZWARN"] == 0) & (meta["Z"] > 0) &
-                (meta["SPECTYPE"] == b"GALAXY") & (meta["DELTACHI2"] > 25))
-    desi_cut = ((desi["ZWARN"] == 0) & (desi["Z"] > 0) &
-                (desi["SPECTYPE"] == "GALAXY") & (desi["DELTACHI2"] > 25))
-    meta = meta[meta_cut]
-    desi = desi[desi_cut]
+    biprateep_masses = fits.open(data_dir / biprateep_filename)[1].data
 
     # Remove duplicates
     # =================
@@ -48,27 +24,59 @@ def clean_data():
         {"target_id": meta["TARGETID"].astype(np.int64),
          "meta_ind": np.arange(len(meta))}
     )
-    desi_df = pd.DataFrame(
-        {"target_id": desi["TARGETID"].astype(np.int64),
-         "desi_ind": np.arange(len(desi))}
+    biprateep_df = pd.DataFrame(
+        {"target_id": biprateep_masses["TARGETID"].astype(np.int64),
+         "biprateep_ind": np.arange(len(biprateep_masses))}
     )
-    merged_df = pd.merge(meta_df, desi_df, on="target_id"
+    merged_df = pd.merge(meta_df, biprateep_df, on="target_id"
                          ).drop_duplicates("target_id")
     meta = meta[merged_df["meta_ind"].values]
-    desi = desi[merged_df["desi_ind"].values]
+    fastphot = fastphot[merged_df["meta_ind"].values]
+    biprateep_masses = biprateep_masses[merged_df["biprateep_ind"].values]
+
+    # Add only the necessary data from fastphot and biprateep_masses
+    # ==============================================================
+    # No need to subtract KCORR_SDSS_R - already k-corrected to z=0.1
+    h = 0.7  # Use h-scaled magnitude (h=0.7 hard-coded into FastSpecFit)
+    abs_rmag_0p1 = fastphot["ABSMAG_SDSS_R"] - 5 * np.log10(h)
+
+    # New column using passive evolution to z=0.1
+    q = 1.62  # table 3 - Blanton+ 2003 (The Galaxy Luminosity Function...)
+    abs_rmag_0p1_evolved = abs_rmag_0p1 + q * (meta["Z"] - 0.1)
+
+    # Put all data into a single catalog
+    # ==================================
+    names = list(meta.dtype.names) + ["abs_rmag_0p1",
+                                      "abs_rmag_0p1_evolved",
+                                      "logmass"]
+    values = [meta[name] for name in meta.dtype.names] + \
+             [abs_rmag_0p1,
+              abs_rmag_0p1_evolved,
+              biprateep_masses["logmass"]]
+    dtypes = [value.dtype.descr[0][1] for value in values]
+    subshapes = [value.shape[1:] for value in values]
+    # names[names.index("RA")] = "TARGET_RA"
+    # names[names.index("DEC")] = "TARGET_DEC"
+    meta = ms.util.make_struc_array(names, values, dtypes, subshapes)
+
+    del fastphot
+    del biprateep_masses
+
+    # Remove bad data
+    # ===============
+    meta_cut = ((meta["ZWARN"] == 0) & (meta["Z"] > 0) &
+                (meta["SPECTYPE"] == "GALAXY") & (meta["DELTACHI2"] > 25))
+    meta = meta[meta_cut]
 
     # Order data by region index (and remove those not in a region)
     # ==========================
     n_region = 20
     meta_region_masks = [desi_sv3_pointings.select_region(
-        i, meta["TARGET_RA"], meta["TARGET_DEC"]) for i in range(n_region)]
-    desi_region_masks = [desi_sv3_pointings.select_region(
-        i, desi["TARGET_RA"], desi["TARGET_DEC"]) for i in range(n_region)]
+        i, meta["RA"], meta["DEC"]) for i in range(n_region)]
 
     meta = np.concatenate([meta[mask] for mask in meta_region_masks])
-    desi = np.concatenate([desi[mask] for mask in desi_region_masks])
 
-    return meta, desi
+    return meta
 
 
 def clean_rands(n_rand_files=None):
@@ -119,9 +127,8 @@ if __name__ == "__main__":
     output_dir = pathlib.Path(a.output_dir)
     out_rand_dir = output_dir / "rands_fuji"
 
-    cleaned_fastphot, cleaned_bipmass = clean_data()
+    cleaned_fastphot = clean_data()
     cleaned_rands = clean_rands(n_rand_files=num_rand_files)
     out_rand_dir.mkdir(parents=True, exist_ok=True)
     np.save(str(output_dir / "fastphot.npy"), cleaned_fastphot)
-    np.save(str(output_dir / "biprateep_masses.npy"), cleaned_bipmass)
     np.save(str(out_rand_dir / "rands.npy"), cleaned_rands)

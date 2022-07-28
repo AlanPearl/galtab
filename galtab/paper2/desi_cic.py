@@ -23,12 +23,11 @@ if __name__ == "__main__":
         help="Run this code only on the first N data per region")
     parser.add_argument(
         "-r", "--first-regions", type=int, default=None, metavar="N",
-        help="Run this code only on the first N regions"
-    )
+        help="Run this code only on the first N regions")
     parser.add_argument(
         "--data-dir", type=str,
-        default=pathlib.Path.home() / "data" / "DESI" / "SV3",
-        help="Directory containing the data (stellar_mass_specz_ztile... file)")
+        default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean",
+        help="Directory containing the data (fastphot.npy file)")
     parser.add_argument(
         "-n", "--num-threads", type=int, default=1,
         help="Number of multiprocessing threads for each CiC process")
@@ -43,12 +42,10 @@ if __name__ == "__main__":
         help="Lower limit on log stellar mass of the sample")
     parser.add_argument(
         "--abs-mr-max", type=float, default=np.inf,
-        help="Upper limit on absolute R-mand magnitude (e.g. -19.5)",
-    )
+        help="Upper limit on absolute R-mand magnitude (e.g. -19.5)")
     parser.add_argument(
-        "--use-fastphot", action="store_true",
-        help="Use the fastphot catalogs for k-corrected M_R values"
-    )
+        "--passive-evolved-mags", action="store_true",
+        help="Apply Q=1.62 passive evolution for the M_R threshold cut")
 
     a = parser.parse_args()
     output_file = a.output
@@ -60,7 +57,7 @@ if __name__ == "__main__":
     logmmin = a.logmmin
     abs_mr_max = a.abs_mr_max
     num_threads = a.num_threads
-    use_fastphot = a.use_fastphot
+    passive_evolved_mags = a.passive_evolved_mags
 
     if a.force_no_mpi:
         MPI, comm = None, None
@@ -76,15 +73,17 @@ if __name__ == "__main__":
 
     def load_data(region_index):
         """Save only the data used for the analysis in a given region"""
-        if use_fastphot:
-            data = np.load(str(data_dir / "fastphot.npy"))
-            abs_mr = data["abs_rmag_rest"]
+        data = np.load(str(data_dir / "fastphot.npy"))
+        if passive_evolved_mags:
+            abs_mr = data["abs_rmag_0p1"]
         else:
-            data = np.load(str(data_dir / "biprateep_masses.npy"))
-            abs_mr = None
-            if abs_mr_max < np.inf:
-                disth = cosmo.comoving_distance(data["Z"]).value * cosmo.h
-                abs_mr = data["rmag"] - 5 * np.log10(disth * 1e5)
+            abs_mr = data["abs_rmag_0p1_evolved"]
+        # else:
+        #     data = np.load(str(data_dir / "biprateep_masses.npy"))
+        #     abs_mr = None
+        #     if abs_mr_max < np.inf:
+        #         disth = cosmo.comoving_distance(data["Z"]).value * cosmo.h
+        #         abs_mr = data["rmag"] - 5 * np.log10(disth * 1e5)
 
         # Threshold cuts here: logm > logmmin, z < zmax, magnitude cut
         datacut = data["Z"] <= zmax
@@ -96,10 +95,10 @@ if __name__ == "__main__":
         data = data[datacut]
 
         data = data[desi_sv3_pointings.select_region(
-            region_index, data["TARGET_RA"], data["TARGET_DEC"])]
+            region_index, data["RA"], data["DEC"])]
 
-        ra = data["TARGET_RA"]
-        dec = data["TARGET_DEC"]
+        ra = data["RA"]
+        dec = data["DEC"]
         dist = cosmo.comoving_distance(data["Z"]).value * cosmo.h
 
         return np.array([ra, dec, dist]).T

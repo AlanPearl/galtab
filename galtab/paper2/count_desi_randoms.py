@@ -29,11 +29,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--rand-dir", type=str,
         default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean" / "rands_fuji",
-        help="Directory containing the randoms (rancomb_... files)")
+        help="Directory containing the randoms (rands.npy file)")
     parser.add_argument(
         "--data-dir", type=str,
         default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean",
-        help="Directory containing the data (stellar_mass_specz_ztile... file)")
+        help="Directory containing the data (fastphot.npy file)")
     parser.add_argument(
         "-n", "--num-threads", type=int, default=1,
         help="Number of multiprocessing threads for each CiC process")
@@ -80,15 +80,15 @@ if __name__ == "__main__":
     def preprocess_region(region_index, save_dir):
         """Save only the data used for the analysis in a given region"""
         rands = np.load(str(rand_dir / "rands.npy"))
-        data = np.load(str(data_dir / "biprateep_masses.npy"))
+        data = np.load(str(data_dir / "fastphot.npy"))
 
         data = data[desi_sv3_pointings.select_region(
-            region_index, data["TARGET_RA"], data["TARGET_DEC"])]
+            region_index, data["RA"], data["DEC"])]
         rands = rands[desi_sv3_pointings.select_region(
             region_index, rands["RA"], rands["DEC"])]
 
-        ra = data["TARGET_RA"]
-        dec = data["TARGET_DEC"]
+        ra = data["RA"]
+        dec = data["DEC"]
         dist = cosmo.comoving_distance(data["Z"]).value * cosmo.h
 
         dist_max, dist_min = np.max(dist), np.min(dist)
