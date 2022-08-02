@@ -52,7 +52,7 @@ if __name__ == "__main__":
     progress = a.progress
     first_n = a.first_n
     first_regions = a.first_regions
-    data_dir = a.data_dir
+    data_dir = pathlib.Path(a.data_dir)
     zmax = a.zmax
     logmmin = a.logmmin
     abs_mr_max = a.abs_mr_max
