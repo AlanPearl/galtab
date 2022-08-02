@@ -11,9 +11,6 @@ import mocksurvey as ms
 
 
 def clean_data():
-    fastphot_filename = "fastphot-everest-sv3-bright.fits"
-    biprateep_filename = "stellar_mass_specz_ztile-sv3-bright-cumulative.fits"
-
     meta = fits.open(data_dir / fastphot_filename)[2].data
     fastphot = fits.open(data_dir / fastphot_filename)[1].data
     biprateep_masses = fits.open(data_dir / biprateep_filename)[1].data
@@ -112,20 +109,39 @@ if __name__ == "__main__":
         help="Directory containing all randoms files"
     )
     parser.add_argument(
-        "--output-dir", type=str, default=pathlib.Path.cwd() / "clean",
+        "--output-dir", type=str, default=pathlib.Path.cwd(),
         help="Specify the output clean data directory"
     )
     parser.add_argument(
         "--num-rand-files", type=int, default=None,
         help="Specify the number of random files to combine"
     )
+    parser.add_argument(
+        "--everest", action="store_true",
+        help="Name the clean output directory 'everest' instead of 'fuji'"
+    )
+    parser.add_argument(
+        "--fastphot-filename", type=str,
+        default="fastphot-everest-sv3-bright.fits",
+        help="Filename of the fastphot catalog"
+    )
+    parser.add_argument(
+        "--biprateep-mass-cat-filename", type=str,
+        default="stellar_mass_specz_ztile-sv3-bright-cumulative.fits",
+        help="Filename of Biprateep's stellar mass catalog"
+    )
 
     a = parser.parse_args()
     num_rand_files = a.num_rand_files
     data_dir = pathlib.Path(a.data_dir)
     rand_dir = pathlib.Path(a.rand_dir)
-    output_dir = pathlib.Path(a.output_dir)
-    out_rand_dir = output_dir / "rands_fuji"
+    if a.everest:
+        output_dir = pathlib.Path(a.output_dir) / "clean_everest"
+    else:
+        output_dir = pathlib.Path(a.output_dir) / "clean_fuji"
+    out_rand_dir = output_dir / "rands"
+    fastphot_filename = a.fastphot_filename
+    biprateep_filename = a.biprateep_mass_cat_filename
 
     cleaned_fastphot = clean_data()
     cleaned_rands = clean_rands(n_rand_files=num_rand_files)

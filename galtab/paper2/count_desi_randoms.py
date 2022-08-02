@@ -27,12 +27,8 @@ if __name__ == "__main__":
         help="Run this code only on the first N regions"
     )
     parser.add_argument(
-        "--rand-dir", type=str,
-        default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean" / "rands_fuji",
-        help="Directory containing the randoms (rands.npy file)")
-    parser.add_argument(
         "--data-dir", type=str,
-        default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean",
+        default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean_fuji",
         help="Directory containing the data (fastphot.npy file)")
     parser.add_argument(
         "-n", "--num-threads", type=int, default=1,
@@ -49,8 +45,8 @@ if __name__ == "__main__":
     progress = a.progress
     first_n = a.first_n
     first_regions = a.first_regions
-    rand_dir = pathlib.Path(a.rand_dir)
     data_dir = pathlib.Path(a.data_dir)
+    rand_dir = data_dir / "rands"
     num_threads = a.num_threads
     preprocess_only = a.preprocess_only
 

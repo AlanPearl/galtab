@@ -26,7 +26,7 @@ if __name__ == "__main__":
         help="Run this code only on the first N regions")
     parser.add_argument(
         "--data-dir", type=str,
-        default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean",
+        default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean_fuji",
         help="Directory containing the data (fastphot.npy file)")
     parser.add_argument(
         "-n", "--num-threads", type=int, default=1,
@@ -75,9 +75,9 @@ if __name__ == "__main__":
         """Save only the data used for the analysis in a given region"""
         data = np.load(str(data_dir / "fastphot.npy"))
         if passive_evolved_mags:
-            abs_mr = data["abs_rmag_0p1"]
-        else:
             abs_mr = data["abs_rmag_0p1_evolved"]
+        else:
+            abs_mr = data["abs_rmag_0p1"]
         # else:
         #     data = np.load(str(data_dir / "biprateep_masses.npy"))
         #     abs_mr = None
