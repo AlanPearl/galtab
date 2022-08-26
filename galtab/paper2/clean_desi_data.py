@@ -14,9 +14,10 @@ def clean_data():
     meta = fits.open(data_dir / fastphot_filename)[2].data
     fastphot = fits.open(data_dir / fastphot_filename)[1].data
     biprateep_masses = fits.open(data_dir / biprateep_filename)[1].data
+    bitweight_cat = fits.open(data_dir / bitweight_cat_filename)[1].data
 
-    # Remove duplicates
-    # =================
+    # Merge catalogs by TARGETID and remove duplicates
+    # ================================================
     meta_df = pd.DataFrame(
         {"target_id": meta["TARGETID"].astype(np.int64),
          "meta_ind": np.arange(len(meta))}
@@ -27,9 +28,18 @@ def clean_data():
     )
     merged_df = pd.merge(meta_df, biprateep_df, on="target_id"
                          ).drop_duplicates("target_id")
+
+    bitweight_df = pd.DataFrame(
+        {"target_id": bitweight_cat["TARGETID"].astype(np.int64),
+         "bitweight_ind": np.arange(len(bitweight_cat))}
+    )
+    merged_df = pd.merge(merged_df, bitweight_df, on="target_id"
+                         ).drop_duplicates("target_id")
+
     meta = meta[merged_df["meta_ind"].values]
     fastphot = fastphot[merged_df["meta_ind"].values]
     biprateep_masses = biprateep_masses[merged_df["biprateep_ind"].values]
+    bitweight_cat = bitweight_cat[merged_df["bitweight_ind"].values]
 
     # Add only the necessary data from fastphot and biprateep_masses
     # ==============================================================
@@ -41,15 +51,23 @@ def clean_data():
     q = 1.62  # table 3 - Blanton+ 2003 (The Galaxy Luminosity Function...)
     abs_rmag_0p1_evolved = abs_rmag_0p1 + q * (meta["Z"] - 0.1)
 
+    # Convert bitweights from signed to unsigned ints to make myself happy
+    # ====================================================================
+    unsigned_dtype = bitweight_cat["BITWEIGHTS"].dtype.descr[0][1]
+    unsigned_dtype = unsigned_dtype.replace("i", "u")
+    bitweights = bitweight_cat["BITWEIGHTS"].astype(unsigned_dtype)
+
     # Put all data into a single catalog
     # ==================================
     names = list(meta.dtype.names) + ["abs_rmag_0p1",
                                       "abs_rmag_0p1_evolved",
-                                      "logmass"]
+                                      "logmass",
+                                      "bitweights"]
     values = [meta[name] for name in meta.dtype.names] + \
              [abs_rmag_0p1,
               abs_rmag_0p1_evolved,
-              biprateep_masses["logmass"]]
+              biprateep_masses["logmass"],
+              bitweights]
     dtypes = [value.dtype.descr[0][1] for value in values]
     subshapes = [value.shape[1:] for value in values]
     # names[names.index("RA")] = "TARGET_RA"
@@ -58,6 +76,7 @@ def clean_data():
 
     del fastphot
     del biprateep_masses
+    del bitweight_cat
 
     # Remove bad data
     # ===============
@@ -65,13 +84,18 @@ def clean_data():
                 (meta["SPECTYPE"] == "GALAXY") & (meta["DELTACHI2"] > 25))
     meta = meta[meta_cut]
 
+    # Remove BGS_FAINT (keep BGS_BRIGHT)
+    # ==================================
+    bright_bit = 1
+    meta = meta[meta["SV3_BGS_TARGET"] & 2 ** bright_bit != 0]
+
     # Order data by region index (and remove those not in a region)
     # ==========================
-    n_region = 20
-    meta_region_masks = [desi_sv3_pointings.select_region(
+    n_region = len(desi_sv3_pointings.lims)
+    region_masks = [desi_sv3_pointings.select_region(
         i, meta["RA"], meta["DEC"]) for i in range(n_region)]
 
-    meta = np.concatenate([meta[mask] for mask in meta_region_masks])
+    meta = np.concatenate([meta[mask] for mask in region_masks])
 
     return meta
 
@@ -110,7 +134,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--output-dir", type=str, default=pathlib.Path.cwd(),
-        help="Specify the output clean data directory"
+        help="Specify where to place the clean data directory"
     )
     parser.add_argument(
         "--num-rand-files", type=int, default=None,
@@ -122,7 +146,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--fastphot-filename", type=str,
-        default="fastphot-everest-sv3-bright.fits",
+        default="fastphot-fuji-sv3-bright.fits",
         help="Filename of the fastphot catalog"
     )
     parser.add_argument(
@@ -130,18 +154,25 @@ if __name__ == "__main__":
         default="stellar_mass_specz_ztile-sv3-bright-cumulative.fits",
         help="Filename of Biprateep's stellar mass catalog"
     )
+    parser.add_argument(
+        "--bitweight-cat-filename", type=str,
+        default="BGS_BRIGHT_full_noveto.dat.fits",
+        help="Filename of the catalog containing fiber assignment bitweights"
+    )
 
     a = parser.parse_args()
     num_rand_files = a.num_rand_files
     data_dir = pathlib.Path(a.data_dir)
     rand_dir = pathlib.Path(a.rand_dir)
     if a.everest:
-        output_dir = pathlib.Path(a.output_dir) / "clean_everest"
+        output_dirname = "clean_everest"
     else:
-        output_dir = pathlib.Path(a.output_dir) / "clean_fuji"
+        output_dirname = "clean_fuji"
+    output_dir = pathlib.Path(a.output_dir) / output_dirname
     out_rand_dir = output_dir / "rands"
     fastphot_filename = a.fastphot_filename
     biprateep_filename = a.biprateep_mass_cat_filename
+    bitweight_cat_filename = a.bitweight_cat_filename
 
     cleaned_fastphot = clean_data()
     cleaned_rands = clean_rands(n_rand_files=num_rand_files)

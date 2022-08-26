@@ -78,21 +78,15 @@ if __name__ == "__main__":
             abs_mr = data["abs_rmag_0p1_evolved"]
         else:
             abs_mr = data["abs_rmag_0p1"]
-        # else:
-        #     data = np.load(str(data_dir / "biprateep_masses.npy"))
-        #     abs_mr = None
-        #     if abs_mr_max < np.inf:
-        #         disth = cosmo.comoving_distance(data["Z"]).value * cosmo.h
-        #         abs_mr = data["rmag"] - 5 * np.log10(disth * 1e5)
 
         # Threshold cuts here: logm > logmmin, z < zmax, magnitude cut
-        datacut = data["Z"] <= zmax
+        cut = data["Z"] <= zmax
         if logmmin > -np.inf:
-            datacut &= data["logmass"] >= logmmin
+            cut &= data["logmass"] >= logmmin
         if abs_mr_max < np.inf:
-            datacut &= abs_mr <= abs_mr_max
+            cut &= abs_mr <= abs_mr_max
 
-        data = data[datacut]
+        data = data[cut]
 
         data = data[desi_sv3_pointings.select_region(
             region_index, data["RA"], data["DEC"])]

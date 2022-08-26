@@ -45,8 +45,8 @@ def make_placeholder_model(galtab):
 
             occ_model.min_prob = get_min_prob(galtab, occ_model, min_quant)
             occ_model.max_quant = max_quant
-            occ_model.mc_occupation = types.MethodType(placeholder_occupation,
-                                                       occ_model)
+            occ_model.mc_occupation = types.MethodType(
+                placeholder_occupation, occ_model)
             setattr(ph_model, method_name, occ_model.mc_occupation)
 
         kwargs = {}
@@ -57,15 +57,10 @@ def make_placeholder_model(galtab):
         ph_model.populate_mock(galtab.halocat, **kwargs)
         galaxies = ph_model.mock.galaxy_table
     finally:
+        # Placeholders have been populated, so now we can
+        # return the model to its original state
         for name, copied_model in zip(occupation_model_names, copied_models):
             model._input_model_dictionary[name] = copied_model
-
-            # Check that the models were returned to their original state
-            assert copied_model.mc_occupation.__doc__ != (
-                "This will overwrite the occupation models to "
-                "populate placeholders")
-            assert not hasattr(copied_model, "min_prob")
-            assert not hasattr(copied_model, "max_prob")
 
     # Add velocity-distorted position columns 'obs_x/y/z'
     real_xyz = np.array([galaxies[x] for x in "xyz"]).T
@@ -79,7 +74,8 @@ def make_placeholder_model(galtab):
 
 
 # noinspection PyProtectedMember
-def calc_weights(halos, galaxies, halo_inds, model):  # TODO: Speed this up with num_ptcl_requirement???
+def calc_weights(halos, galaxies, halo_inds, model):
+    # TODO: Speed this up with num_ptcl_requirement???
     weights = np.empty_like(galaxies["x"])
 
     # Access the occupation component models

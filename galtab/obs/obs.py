@@ -18,8 +18,8 @@ def _counter(pt):
     tree_xy = _global_tree_xy
     (companions, r_cyl, cyl_half_length, weigh_companions, companion_weights,
      infinite_distance, search_angle_at_near_end_of_cylinder,
-     perform_additional_angle_selection_at_companion_dist
-     ) = _global_counter_args
+     perform_additional_angle_selection_at_companion_dist,
+     return_indices) = _global_counter_args
 
     if search_angle_at_near_end_of_cylinder:
         pt_dist = pt[2] - cyl_half_length
@@ -29,6 +29,7 @@ def _counter(pt):
     ang_radius = get_search_angle(r_cyl, cyl_half_length, pt_dist)
     idx_xy = tree_xy.query_radius(pt[:2], ang_radius / np.cos(pt[1]))
     cnt = 0
+    indices = []
     for j in idx_xy:
         if perform_additional_angle_selection_at_companion_dist:
             ang_radius = r_cyl / companions[j, 2]
@@ -38,11 +39,15 @@ def _counter(pt):
         if dist_check and (((pt[0] - companions[j, 0]) * np.cos(pt[1])) ** 2 +
                            (pt[1] - companions[j, 1]) ** 2 < ang_radius ** 2):
             # and not np.allclose(pt, self.companions[j], 0, 1e-7)):
+            indices[j].append(j)
             if weigh_companions:
                 cnt += companion_weights[j]
             else:
                 cnt += 1
-    return cnt
+    if return_indices:
+        return cnt, indices
+    else:
+        return cnt
 
 
 def _counter_init():
@@ -65,12 +70,12 @@ def _counter_exit():
 
 
 def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
-                 weigh_companions=False, companion_weights=None,
-                 weigh_counts=False, count_weights=None, progress=False,
-                 infinite_distance=False,
+                 weigh_companions=False, return_indices=False,
+                 companion_weights=None, weigh_counts=False,
+                 count_weights=None, progress=False, infinite_distance=False,
                  search_angle_at_near_end_of_cylinder=False,
                  perform_additional_angle_selection_at_companion_dist=False,
-                 num_threads=1, use_mpi=False, tqdm_kwargs=None):
+                 num_threads=1, tqdm_kwargs=None):
     """
     Calculate counts-in-cylinders from observed celestial data
     Based off Kuan Wang's Ncic function
@@ -115,27 +120,14 @@ def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
         companions, r_cyl, cyl_half_length, weigh_companions,
         companion_weights, infinite_distance,
         search_angle_at_near_end_of_cylinder,
-        perform_additional_angle_selection_at_companion_dist)
+        perform_additional_angle_selection_at_companion_dist,
+        return_indices)
 
     pool_class = pool_args = pool_kwargs = None
     if num_threads > 1:
-        # if MPI.COMM_WORLD.Get_size() > 1:
-        # if MPI.UNIVERSE_SIZE > 1:
-        if use_mpi:
-            # This is usually 1, but is 2 if I do mpiexec -n 2 ...
-            print("world size =", MPI.COMM_WORLD.Get_size())
-            # This is always 6.
-            print("universe size =", MPI.UNIVERSE_SIZE)
-            pool_class = MPIPoolExecutor
-            pool_args = ()
-            pool_kwargs = dict(initializer=_counter_init,
-                               globals=dict(
-                                   _global_tree_xy=None,
-                                   _global_counter_args=None))
-        else:
-            pool_class = multiprocessing.Pool
-            pool_args = (num_threads,)
-            pool_kwargs = dict(initializer=_counter_init)
+        pool_class = multiprocessing.Pool
+        pool_args = (num_threads,)
+        pool_kwargs = dict(initializer=_counter_init)
 
     if pool_class is None:
         _counter_init()
@@ -145,23 +137,17 @@ def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
         cnts = [_counter(point) for point in iterator]
     else:
         with pool_class(*pool_args, **pool_kwargs) as pool:
-            if use_mpi:
-                # future = pool.submit(_counter_init)
-                # print(repr(future.result()))
-                # assert future.done()
-                if progress:
-                    print("Sadly, I don't think it's possible to "
-                          "make a tqdm progress bar with MPI pools :(")
-                cnts = list(pool.map(_counter, centers))
-            else:
-                iterator = pool.imap(_counter, centers)
-                if progress:
+            iterator = pool.imap(_counter, centers)
+            if progress:
 
-                    iterator = tqdm.tqdm(iterator, **tqdm_kwargs)
-                cnts = list(iterator)
-
+                iterator = tqdm.tqdm(iterator, **tqdm_kwargs)
+            cnts = list(iterator)
     # TODO: Move this into the multiprocessing Finalizer registry
     _counter_exit()
+    indices = None
+    if return_indices:
+        cnts, indices = zip(*cnts)
+
     if weigh_counts:
         cnts = np.array(cnts) * count_weights
     else:
@@ -169,7 +155,10 @@ def cic_obs_data(centers, companions, r_cyl, cyl_half_length, cosmo=None,
 
     # To remove self-counting, subtract count_weights * companion_weights[center_indices]
     # In the case of no weights, simply subtract 1
-    return cnts
+    if return_indices:
+        return cnts, np.array(indices, dtype=object)
+    else:
+        return cnts
 
 
 def get_search_angle(r_cyl, cyl_half_length, point_dist):

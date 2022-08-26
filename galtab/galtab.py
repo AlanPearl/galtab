@@ -18,7 +18,8 @@ class GalaxyTabulator:
     """
 
     def __init__(self, halocat, fiducial_model, n_mc=10,
-                 min_quant=0.001, max_quant=0.9999, num_ptcl_requirement=None,
+                 min_quant=0.001, max_quant=0.9999, sample_fraction=1.0,
+                 num_ptcl_requirement=None,
                  seed=None, cosmo=None):
         """
         Parameters
@@ -35,6 +36,9 @@ class GalaxyTabulator:
         max_quant : float (default = 0.9999)
             The quantile of the Poisson distribution centered around <N_sat>
             to use as the number of satellite placeholders per halo
+        sample_fraction : float (default = 1.0)
+            The fraction of galaxies to keep - useful for modeling surveys
+            whose targeting fraction is <100%, but not spatially correlated
         num_ptcl_requirement : Optional[int]
             Passed to the initial call of model.populate_mock()
         seed : Optional[int]
@@ -51,6 +55,7 @@ class GalaxyTabulator:
         self.n_mc = n_mc
         self.min_quant = min_quant
         self.max_quant = max_quant
+        self.sample_fraction = sample_fraction
         if num_ptcl_requirement is None:
             self.num_ptcl_requirement = htsm.sim_defaults.Num_ptcl_requirement
         else:
@@ -77,8 +82,11 @@ class GalaxyTabulator:
 
     def calc_weights(self, model):
         self.weights = gt.calc_weights(
-            self.halo_table, self.galaxies, self.halo_inds, model)
-        return self.weights
+            self.halo_table, self.galaxies, self.halo_inds,
+            model)
+        # TODO: More efficient if I had just thrown out (1 - sample_fraction)
+        # TODO: of the tabulated galaxy sample at the start
+        return self.weights * self.sample_fraction
 
     def tabulate_cic(self, **kwargs):
         self.predictor = CICTabulator(self, **kwargs)
