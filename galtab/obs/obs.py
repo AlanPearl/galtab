@@ -39,7 +39,7 @@ def _counter(pt):
         if dist_check and (((pt[0] - companions[j, 0]) * np.cos(pt[1])) ** 2 +
                            (pt[1] - companions[j, 1]) ** 2 < ang_radius ** 2):
             # and not np.allclose(pt, self.companions[j], 0, 1e-7)):
-            indices[j].append(j)
+            indices.append(j)
             if weigh_companions:
                 cnt += companion_weights[j]
             else:
