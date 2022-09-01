@@ -1,5 +1,6 @@
 import argparse
 import glob
+import json
 
 import numpy as np
 import pandas as pd
@@ -43,7 +44,7 @@ def clean_data():
 
     # Add only the necessary data from fastphot and biprateep_masses
     # ==============================================================
-    # No need to subtract KCORR_SDSS_R - already k-corrected to z=0.1
+    # No need to subtract KCORR_SDSS_R -- it's already k-corrected to z=0.1
     h = 0.7  # Use h-scaled magnitude (h=0.7 hard-coded into FastSpecFit)
     abs_rmag_0p1 = fastphot["ABSMAG_SDSS_R"] - 5 * np.log10(h)
 
@@ -118,23 +119,23 @@ def clean_rands(n_rand_files=None):
     # =================
     rands = rands[rands["ZWARN"] == 0]
 
-    return rands
+    # noinspection PyArgumentList
+    rands_meta = {"num_rand_files": n_rand_files}
+    return rands, rands_meta
 
+
+default_data_dir = pathlib.Path.home() / "data" / "DESI" / "SV3"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="clean_desi_data")
     parser.formatter_class = argparse.ArgumentDefaultsHelpFormatter
     parser.add_argument(
-        "--data-dir", type=str, default=pathlib.Path.cwd(),
+        "--data-dir", type=str, default=default_data_dir,
         help="Directory containing all data files"
     )
     parser.add_argument(
-        "--rand-dir", type=str, default=pathlib.Path.cwd() / "rands_fuji",
+        "--rand-dir", type=str, default=default_data_dir / "rands_fuji",
         help="Directory containing all randoms files"
-    )
-    parser.add_argument(
-        "--output-dir", type=str, default=pathlib.Path.cwd(),
-        help="Specify where to place the clean data directory"
     )
     parser.add_argument(
         "--num-rand-files", type=int, default=None,
@@ -168,14 +169,17 @@ if __name__ == "__main__":
         output_dirname = "clean_everest"
     else:
         output_dirname = "clean_fuji"
-    output_dir = pathlib.Path(a.output_dir) / output_dirname
+    output_dir = pathlib.Path(a.data_dir) / output_dirname
     out_rand_dir = output_dir / "rands"
     fastphot_filename = a.fastphot_filename
     biprateep_filename = a.biprateep_mass_cat_filename
     bitweight_cat_filename = a.bitweight_cat_filename
 
     cleaned_fastphot = clean_data()
-    cleaned_rands = clean_rands(n_rand_files=num_rand_files)
-    out_rand_dir.mkdir(parents=True, exist_ok=True)
+    cleaned_rands, rands_meta = clean_rands(n_rand_files=num_rand_files)
+    output_dir.mkdir(exist_ok=False)
+    out_rand_dir.mkdir()
     np.save(str(output_dir / "fastphot.npy"), cleaned_fastphot)
     np.save(str(out_rand_dir / "rands.npy"), cleaned_rands)
+    with open(str(out_rand_dir / "rands_meta.json"), "w") as f:
+        json.dump(rands_meta, f, indent=4)

@@ -3,13 +3,6 @@ import fast3tree
 import tqdm
 import multiprocessing
 
-import_mpi = False  # I haven't gotten the MPI pool working yet.
-if import_mpi:
-    from mpi4py import MPI
-    from mpi4py.futures import MPIPoolExecutor
-else:
-    MPI, MPIPoolExecutor = None, None
-
 global _global_tree_xy, _global_counter_args
 
 
@@ -166,3 +159,42 @@ def get_search_angle(r_cyl, cyl_half_length, point_dist):
     # volume = 2*pi*r_cyl^2*cyl_half_length = 2/3*pi*(1-cos(search_angle))*diff_r3
     diff_r3 = (point_dist + cyl_half_length)**3 - (point_dist - cyl_half_length)**3
     return np.arccos(1 - 3 * r_cyl**2 * cyl_half_length / diff_r3)
+
+
+def fuzzy_histogram(x, centroids, weights=None):
+    x = np.asarray(x)
+    if weights is None:
+        weights = np.ones_like(x, dtype=float)
+    else:
+        weights = np.asarray(weights)
+    sorted_centroid_inds = np.argsort(centroids)
+    sorted_centroids = np.asarray(centroids)[sorted_centroid_inds]
+    ans = np.zeros_like(centroids, dtype=float)
+
+    # Handle edge cases
+    # =================
+    mask_under = x <= sorted_centroids[0]
+    mask_over = x >= sorted_centroids[-1]
+    ans[0] = np.sum(weights[mask_under])
+    ans[-1] = np.sum(weights[mask_over])
+
+    # Handle non-edge cases
+    # =====================
+    x = x[~(mask_under | mask_over)]
+    weights = weights[~(mask_under | mask_over)]
+    bin_inds = np.digitize(x, sorted_centroids) - 1
+
+    dist_left = x - sorted_centroids[bin_inds]
+    dist_right = sorted_centroids[bin_inds + 1] - x
+    bin_width = dist_left + dist_right
+    weight_left = weights * dist_right / bin_width
+    weight_right = weights * dist_left / bin_width
+
+    np.add.at(ans, bin_inds, weight_left)
+    np.add.at(ans, bin_inds + 1, weight_right)
+
+    # Return centroids and corresponding counts to their original order
+    # =================================================================
+    orig_order_ans = np.zeros_like(ans)
+    orig_order_ans[sorted_centroid_inds] = ans
+    return orig_order_ans

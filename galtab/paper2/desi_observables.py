@@ -1,4 +1,5 @@
 import argparse
+import json
 
 import numpy as np
 import scipy.special
@@ -10,22 +11,21 @@ import mocksurvey as ms
 
 import galtab.obs
 from galtab.paper2 import desi_sv3_pointings
-from .param_config import cosmo, proj_search_radius, cylinder_half_length
+from .param_config import cosmo, proj_search_radius, cylinder_half_length, \
+    pimax, rp_edges, cic_edges, zmin, zmax
 
 
 class ObservableCalculator:
     def __init__(self, **kwargs):
         # Files and performance arguments
         self.data_dir = pathlib.Path(kwargs["data_dir"])
-        self.rand_dir = pathlib.Path(kwargs["rand_dir"])
-        self.num_rand_files = kwargs["num_rand_files"]
         self.num_threads = kwargs["num_threads"]
         self.progress = kwargs["progress"]
         self.wp_rand_frac = kwargs["wp_rand_frac"]
         self.verbose = kwargs["verbose"]
         self.first_n = kwargs["first_n"]
-        self.apply_pip_weights_wp = kwargs["apply_pip_weights_wp"]
-        self.apply_pip_weights_cic = kwargs["apply_pip_weights_cic"]
+        self.apply_pip_weights_wp = kwargs["apply_pip_weights"]
+        self.apply_pip_weights_cic = kwargs["apply_pip_weights"]
         # Cosmology, sample, and metric parameters
         self.cosmo = kwargs["cosmo"]
         self.zmin = kwargs["zmin"]
@@ -39,6 +39,7 @@ class ObservableCalculator:
         self.proj_search_radius = kwargs["proj_search_radius"]
         self.cylinder_half_length = kwargs["cylinder_half_length"]
         self.effective_area_sqdeg = kwargs["effective_area_sqdeg"]
+        self.num_rand_files = None
 
         # Load the data, prepare it, and calculate masks
         self.slice_n, self.slice_wp, self.slice_cic = None, None, None
@@ -58,17 +59,22 @@ class ObservableCalculator:
         n_iterator = range(self.numjack)
         wp_iterator = range(self.numjack)
         cic_iterator = range(self.numjack)
+
         if self.progress:
             n_iterator = tqdm(
                 n_iterator, desc="Completed n jackknife samples")
+        n_jacks = np.array([self.jack_n(x) for x in n_iterator])
+
+        if self.progress:
             wp_iterator = tqdm(
                 wp_iterator, desc="Completed wp jackknife samples")
+        wp_jacks = np.array([self.jack_wp(x) for x in wp_iterator])
+
+        if self.progress:
             cic_iterator = tqdm(
                 cic_iterator, desc="Completed CiC jackknife samples")
-
-        n_jacks = np.array([self.jack_n(x) for x in n_iterator])
-        wp_jacks = np.array([self.jack_wp(x) for x in wp_iterator])
         cic_jacks = [self.jack_cic(x) for x in cic_iterator]
+
         cic_lengths = [len(x) for x in cic_jacks]
         cic_pads = [max(cic_lengths) - x for x in cic_lengths]
         cic_jacks = np.array([np.pad(x, (0, y)) for (x, y)
@@ -89,10 +95,13 @@ class ObservableCalculator:
     def load_data(self):
         fastphot_fn = str(self.data_dir / "fastphot.npy")
         randcyl_fn = str(self.data_dir / "desi_rand_counts.npy")
-        rand_fn = str(self.rand_dir / "rands.npy")
+        rand_fn = str(self.data_dir / "rands" / "rands.npy")
+        rand_meta_fn = str(self.data_dir / "rands" / "rands_meta.json")
 
         fastphot = np.load(fastphot_fn)
         rands = np.load(rand_fn)
+        with open(rand_meta_fn) as f:
+            self.num_rand_files = json.load(f)["num_rand_files"]
         randcyl = np.concatenate(np.load(randcyl_fn, allow_pickle=True))
         region_masks = [galtab.paper2.desi_sv3_pointings.select_region(
             i, fastphot["RA"], fastphot["DEC"]) for i in range(20)]
@@ -101,16 +110,17 @@ class ObservableCalculator:
                 fastphot["Z"] <= self.zmax)
         mask_thresh = np.ones_like(mask_z)
         if self.logmmin > -np.inf:
-            mask_thresh = fastphot["logmass"] >= self.logmmin
-        elif self.abs_mr_max < np.inf:
+            mask_thresh &= fastphot["logmass"] >= self.logmmin
+        if self.abs_mr_max < np.inf:
             if self.passive_evolved_mags:
                 abs_mr = fastphot["abs_rmag_0p1_evolved"]
             else:
                 abs_mr = fastphot["abs_rmag_0p1"]
-            mask_thresh = abs_mr <= self.abs_mr_max
+            mask_thresh &= abs_mr <= self.abs_mr_max
 
         # We only want to use BGS_BRIGHT
-        assert np.all(fastphot["SV3_BGS_TARGET"] & 2 != 0)
+        assert np.all(fastphot["SV3_BGS_TARGET"] & 2 != 0), \
+            "We only want to use targets flagged as BGS_BRIGHT"
 
         rand_region_masks = [galtab.paper2.desi_sv3_pointings.select_region(
             i, rands["RA"], rands["DEC"]) for i in range(20)]
@@ -136,7 +146,8 @@ class ObservableCalculator:
 
     def calc_randcic_cut(self):
         angles = 180 / np.pi * galtab.obs.get_search_angle(
-            proj_search_radius, cylinder_half_length, self.data_rdx[:, 2])
+            self.proj_search_radius, self.cylinder_half_length,
+            self.data_rdx[:, 2])
         randcyl_density = self.randcyl / (np.pi * angles ** 2)
         model = RandDensityModelCut(randcyl_density)
         randcic_cut = model.optimal_cut()
@@ -150,7 +161,7 @@ class ObservableCalculator:
         if effective_area_sqdeg is None:
             num_rands_per_file = len(self.rands_rdx) / self.num_rand_files
             effective_area_sqdeg = num_rands_per_file / rands_per_sqdeg
-        cut = (self.randcic_cut & self.mask_z)
+        cut = self.randcic_mask & self.mask_z
         average_completeness = (self.randcyl_density[cut].mean() /
                                 self.num_rand_files / rands_per_sqdeg)
         if self.verbose:
@@ -163,10 +174,10 @@ class ObservableCalculator:
         return effective_area_sqdeg, effective_volume, average_completeness
 
     def jack_cic(self, njack):
-        non_spatial_cut = (self.mask_thresh & ~self.region_masks[njack])
-        sample_cut = self.mask_z & self.randcic_mask & non_spatial_cut
-        sample2 = self.data_rdx[non_spatial_cut]
-        sample1 = self.data_rdx[sample_cut]
+        sample2_cut = (self.mask_thresh & ~self.region_masks[njack])
+        sample1_cut = self.mask_z & self.randcic_mask & sample2_cut
+        sample2 = self.data_rdx[sample2_cut]
+        sample1 = self.data_rdx[sample1_cut]
         if self.first_n is not None:
             sample1 = sample1[:self.first_n]
         cic, indices = galtab.obs.cic_obs_data(
@@ -174,16 +185,20 @@ class ObservableCalculator:
             self.cylinder_half_length, return_indices=True,
             progress=self.progress, tqdm_kwargs=dict(leave=False),
             num_threads=self.num_threads)
-        return self.bin_raw_cic_counts(cic, indices, sample_cut)
+        cic -= 1
+        return self.bin_raw_cic_counts(cic, indices, sample1_cut, sample2_cut)
 
     def jack_wp(self, njack):
-        if self.apply_pip_weights_wp:
-            raise NotImplementedError()
-        sample = self.data_rdx[self.mask_thresh & self.mask_z &
-                               ~self.region_masks[njack]]
+        datamask = self.mask_thresh & self.mask_z & ~self.region_masks[njack]
+        sample = self.data_rdx[datamask]
         rands = self.rands_rdx[~self.rand_region_masks[njack]]
+        rands = rands[np.random.rand(len(rands)) < self.wp_rand_frac]
+        weights = None
+        if self.apply_pip_weights_wp:
+            weights = self.bitmasks[datamask].T
         wp = ms.cf.wp_rp(
-            sample, rands, self.rp_edges, self.pimax, is_celestial_data=True)
+            sample, rands, self.rp_edges, self.pimax, weights=weights,
+            is_celestial_data=True, nthreads=self.num_threads)
         return wp
 
     def jack_n(self, njack):
@@ -193,26 +208,34 @@ class ObservableCalculator:
                           ~self.region_masks[njack])
         return n_sample / self.effective_volume / jack_vol_factor
 
-    def bin_raw_cic_counts(self, cic, indices, sample_cut):
+    def bin_raw_cic_counts(self, cic, indices, sample1_cut, sample2_cut):
         iip_weights = None
         if self.apply_pip_weights_cic:
-            bitmasks = self.bitmasks[sample_cut]
-            numbits = bitmasks.shape[1] * bitmasks.itemsize * 8
-            iip_weights = numbits / np.sum(
-                ms.util.bitsum_hamming_weight(bitmasks), axis=1)
+            bitmasks1 = self.bitmasks[sample1_cut]
+            bitmasks2 = self.bitmasks[sample2_cut]
+            numbits = bitmasks1.shape[1] * bitmasks1.itemsize * 8
+            # Individual inverse probabilities (IIP)
+            bitsum = np.sum(
+                ms.util.bitsum_hamming_weight(bitmasks1), axis=1)
+            iip_weights = (numbits + 1) / (bitsum + 1)
+
+            # Counts = sum of inverse conditional probabilities
+            # P(j | i) = P(i and j) / P(i)
             counts = []
-            for i in range(len(bitmasks)):
-                pip_weights = numbits / np.sum(ms.util.bitsum_hamming_weight(
-                    bitmasks[i] & bitmasks[indices[i]]), axis=1)
-                counts.append(pip_weights)
+            for i in range(len(bitmasks1)):
+                pair_bitsums = np.sum(ms.util.bitsum_hamming_weight(
+                    bitmasks1[i] & bitmasks2[indices[i]]), axis=1)
+                icp_weights = (bitsum[i] + 1) / (pair_bitsums + 1)
+                counts.append(icp_weights.sum())
             cic = counts
 
+        # Assign fuzzy weights to nearest integers, then bin with cic_edges
+        # =================================================================
         if self.cic_edges is None:
-            return np.bincount(cic)
-        elif self.apply_pip_weights_cic:
-            np.histogram(cic, bins=self.cic_edges, weights=iip_weights)
-        else:
-            np.histogram(cic, bins=self.cic_edges)
+            self.cic_edges = np.arange(-0.5, np.max(cic) + 1)
+        integers = np.arange(np.max(cic) + 1)
+        fuzz = galtab.obs.fuzzy_histogram(cic, integers, weights=iip_weights)
+        return np.histogram(integers, self.cic_edges, weights=fuzz)[0]
 
 
 class RandDensityModelCut:
@@ -279,52 +302,81 @@ class RandDensityModelCut:
         return good_hist[self.bin_cens >= x].sum() / good_hist.sum()
 
 
+class ArrayFloats(argparse.Action):
+    # noinspection PyShadowingNames
+    def __call__(self, parser, namespace, values, option_string=None):
+        attr = np.array([float(x) for x in values.split(",")])
+        setattr(namespace, self.dest, attr)
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(prog="desi_cic")
+    parser = argparse.ArgumentParser(prog="desi_observables")
     parser.formatter_class = argparse.ArgumentDefaultsHelpFormatter
     parser.add_argument(
-        "-o", "--output", type=str, default="desi_cic.npy",
+        "-o", "--output", type=str, default="desi_obs.npz",
         help="Specify the output filename")
-    parser.add_argument(
-        "-p", "--progress", action="store_true",
-        help="Show progress with tqdm")
-    parser.add_argument(
-        "-f", "--first-n", type=int, default=None, metavar="N",
-        help="Run this code only on the first N data per region")
-    parser.add_argument(
-        "-r", "--first-regions", type=int, default=None, metavar="N",
-        help="Run this code only on the first N regions")
     parser.add_argument(
         "--data-dir", type=str,
         default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean_fuji",
         help="Directory containing the data (fastphot.npy file)")
     parser.add_argument(
+        "--apply-pip-weights", action="store_true",
+        help="Use PIP weighting to calculate wp and CiC")
+    parser.add_argument(
+        "-p", "--progress", action="store_true",
+        help="Show progress with tqdm")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="Print some results as they are calculated")
+    parser.add_argument(
+        "--wp-rand-frac", type=float, default=1.0,
+        help="Fraction of randoms to use for wp(rp) calculation")
+    parser.add_argument(
+        "-f", "--first-n", type=int, default=None, metavar="N",
+        help="Run this code only on the first N data per region")
+    parser.add_argument(
         "-n", "--num-threads", type=int, default=1,
         help="Number of multiprocessing threads for each CiC process")
+    # Sample cuts and metric parameters
+    # =================================
     parser.add_argument(
-        "--force-no-mpi", action="store_true",
-        help="Prevent even attempting to import the mpi4py module")
+        "--zmin", type=float, default=zmin, metavar="X",
+        help="Lower limit on redshift of the sample")
     parser.add_argument(
-        "--zmin", type=float, default=0.1,
-        help="Lower limit on redshift of the sample"
-    )
-    parser.add_argument(
-        "--zmax", type=float, default=0.2,
+        "--zmax", type=float, default=zmax, metavar="X",
         help="Upper limit on redshift of the sample")
     parser.add_argument(
-        "--logmmin", type=float, default=-np.inf,
+        "--logmmin", type=float, default=-np.inf, metavar="X",
         help="Lower limit on log stellar mass of the sample")
     parser.add_argument(
-        "--abs-mr-max", type=float, default=np.inf,
+        "--abs-mr-max", type=float, default=np.inf, metavar="X",
         help="Upper limit on absolute R-mand magnitude (e.g. -19.5)")
     parser.add_argument(
         "--passive-evolved-mags", action="store_true",
         help="Apply Q=1.62 passive evolution for the M_R threshold cut")
+    parser.add_argument(
+        "--rp-edges", action=ArrayFloats, default=rp_edges,
+        help="Bin edges in rp [Mpc/h] for wp(rp)", metavar="X0,X1,...")
+    parser.add_argument(
+        "--pimax", type=float, default=pimax, metavar="X",
+        help="Integration limit in pi [Mpc/h] for wp(rp)")
+    parser.add_argument(
+        "--cic-edges", action=ArrayFloats, default=cic_edges,
+        help="Bin edges in Ncic for CiC", metavar="X0,X1,...")
+    parser.add_argument(
+        "--proj-search-radius", type=float, default=proj_search_radius,
+        help="Cylinder radius [Mpc/h] for CiC", metavar="X")
+    parser.add_argument(
+        "--cylinder-half-length", type=float, default=cylinder_half_length,
+        help="Helf length of cylinder [Mpc/h] for CiC", metavar="X")
+    parser.add_argument(
+        "--effective-area-sqdeg", type=float, default=None, metavar="X",
+        help="Effective area in sq deg (calculated if not supplied)")
 
     a = parser.parse_args()
     output_file = a.output
 
-    calc = ObservableCalculator(**a.__dict__)
+    calc = ObservableCalculator(**a.__dict__, cosmo=cosmo)
     mean, cov = calc()
 
     np.savez(output_file,
@@ -333,6 +385,8 @@ if __name__ == "__main__":
              slice_n=calc.slice_n,
              slice_wp=calc.slice_wp,
              slice_cic=calc.slice_cic,
+             rp_edges=calc.rp_edges,
+             cic_edges=calc.cic_edges,
              average_cylinder_completeness=calc.average_cylinder_completeness,
              effective_area_sqdeg=calc.effective_area_sqdeg,
              effective_volume=calc.effective_volume)
