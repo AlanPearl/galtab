@@ -263,9 +263,10 @@ class RandDensityModelCut:
             self.model_pdf, self.bin_cens, self.hist, p0=self.p0, bounds=self.bounds)
 
     def optimal_cut(self):
+        purt_factor = 5  # weight purity higher than completeness by this factor
         comp = np.array([self.model_selection_completeness(x, *self.bestp) for x in self.bin_cens])
         purt = np.array([self.model_selection_purity(x, *self.bestp) for x in self.bin_cens])
-        opt_arg = np.argmin((1 - comp) ** 2 + (5 - 5 * purt) ** 2)
+        opt_arg = np.nanargmin((1 - comp) ** 2 + (purt_factor*(1 - purt)) ** 2)
         opt_cut = self.bin_cens[opt_arg]
         return opt_cut
 
