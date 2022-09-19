@@ -117,6 +117,7 @@ def clean_rands(n_rand_files=None):
         n_rand_n_files = len(glob.glob(str(rand_dir / filename_n_i("*"))))
         n_rand_s_files = len(glob.glob(str(rand_dir / filename_s_i("*"))))
         assert n_rand_n_files == n_rand_s_files
+        n_rand_files = n_rand_n_files
     rand_n_files = [rand_dir / filename_n_i(i) for i in range(n_rand_n_files)]
     rand_s_files = [rand_dir / filename_s_i(i) for i in range(n_rand_s_files)]
     rands = np.concatenate([fits.open(x)[1].data
