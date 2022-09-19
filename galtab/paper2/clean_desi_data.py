@@ -15,7 +15,22 @@ def clean_data():
     meta = fits.open(data_dir / fastphot_filename)[2].data
     fastphot = fits.open(data_dir / fastphot_filename)[1].data
     biprateep_masses = fits.open(data_dir / biprateep_filename)[1].data
-    bitweight_cat = fits.open(data_dir / bitweight_cat_filename)[1].data
+    clustering_cat_n = fits.open(data_dir / clustering_cat_n_filename)[1].data
+    clustering_cat_s = fits.open(data_dir / clustering_cat_s_filename)[1].data
+    clustering_cat = np.concatenate([clustering_cat_n, clustering_cat_s])
+
+    # Remove bad data
+    # ===============
+    # ZWARN cut is unnecessary since we merge with clustering_cat
+    meta_cut = (  # (meta["ZWARN"] == 0) &
+                (meta["Z"] > 0) &
+                (meta["SPECTYPE"] == "GALAXY") & (meta["DELTACHI2"] > 25))
+    meta = meta[meta_cut]
+
+    # Remove BGS_FAINT (keep BGS_BRIGHT)
+    # ==================================
+    bright_bit = 1
+    meta = meta[meta["SV3_BGS_TARGET"] & 2 ** bright_bit != 0]
 
     # Merge catalogs by TARGETID and remove duplicates
     # ================================================
@@ -30,17 +45,17 @@ def clean_data():
     merged_df = pd.merge(meta_df, biprateep_df, on="target_id"
                          ).drop_duplicates("target_id")
 
-    bitweight_df = pd.DataFrame(
-        {"target_id": bitweight_cat["TARGETID"].astype(np.int64),
-         "bitweight_ind": np.arange(len(bitweight_cat))}
+    clustering_df = pd.DataFrame(
+        {"target_id": clustering_cat["TARGETID"].astype(np.int64),
+         "clustering_ind": np.arange(len(clustering_cat))}
     )
-    merged_df = pd.merge(merged_df, bitweight_df, on="target_id"
+    merged_df = pd.merge(merged_df, clustering_df, on="target_id"
                          ).drop_duplicates("target_id")
 
     meta = meta[merged_df["meta_ind"].values]
     fastphot = fastphot[merged_df["meta_ind"].values]
     biprateep_masses = biprateep_masses[merged_df["biprateep_ind"].values]
-    bitweight_cat = bitweight_cat[merged_df["bitweight_ind"].values]
+    clustering_cat = clustering_cat[merged_df["clustering_ind"].values]
 
     # Add only the necessary data from fastphot and biprateep_masses
     # ==============================================================
@@ -54,9 +69,9 @@ def clean_data():
 
     # Convert bitweights from signed to unsigned ints to make myself happy
     # ====================================================================
-    unsigned_dtype = bitweight_cat["BITWEIGHTS"].dtype.descr[0][1]
+    unsigned_dtype = clustering_cat["BITWEIGHTS"].dtype.descr[0][1]
     unsigned_dtype = unsigned_dtype.replace("i", "u")
-    bitweights = bitweight_cat["BITWEIGHTS"].astype(unsigned_dtype)
+    bitweights = clustering_cat["BITWEIGHTS"].astype(unsigned_dtype)
 
     # Put all data into a single catalog
     # ==================================
@@ -77,18 +92,7 @@ def clean_data():
 
     del fastphot
     del biprateep_masses
-    del bitweight_cat
-
-    # Remove bad data
-    # ===============
-    meta_cut = ((meta["ZWARN"] == 0) & (meta["Z"] > 0) &
-                (meta["SPECTYPE"] == "GALAXY") & (meta["DELTACHI2"] > 25))
-    meta = meta[meta_cut]
-
-    # Remove BGS_FAINT (keep BGS_BRIGHT)
-    # ==================================
-    bright_bit = 1
-    meta = meta[meta["SV3_BGS_TARGET"] & 2 ** bright_bit != 0]
+    del clustering_cat
 
     # Order data by region index (and remove those not in a region)
     # ==========================
@@ -102,26 +106,34 @@ def clean_data():
 
 
 def clean_rands(n_rand_files=None):
+    def filename_n_i(i):
+        return f"BGS_BRIGHT_N_{i}_clustering.ran.fits"
+
+    def filename_s_i(i):
+        return f"BGS_BRIGHT_S_{i}_clustering.ran.fits"
+
+    n_rand_n_files = n_rand_s_files = n_rand_files
     if n_rand_files is None:
-        n_rand_files = len(glob.glob(
-            str(rand_dir / "rancomb_*brightwdupspec_Alltiles.fits")))
-    rand_filenames = [f"rancomb_{i}brightwdupspec_Alltiles.fits"
-                      for i in range(n_rand_files)]
-    rand_files = [rand_dir / x for x in rand_filenames]
-    rands = np.concatenate([fits.open(x)[1].data for x in rand_files])
+        n_rand_n_files = len(glob.glob(str(rand_dir / filename_n_i("*"))))
+        n_rand_s_files = len(glob.glob(str(rand_dir / filename_s_i("*"))))
+        assert n_rand_n_files == n_rand_s_files
+    rand_n_files = [rand_dir / filename_n_i(i) for i in range(n_rand_n_files)]
+    rand_s_files = [rand_dir / filename_s_i(i) for i in range(n_rand_s_files)]
+    rands = np.concatenate([fits.open(x)[1].data
+                            for x in rand_n_files + rand_s_files])
 
-    # Remove duplicates
+    # Remove "bad" data (these are apparently unnecessary or already done)
     # =================
-    unique_inds = np.unique(rands["TARGETID"], return_index=True)[1]
-    rands = rands[unique_inds]
+    # rands = rands[rands["ZWARN"] == 0]
+    # rands = rands[rands["COADD_FIBERSTATUS"] == 0]
 
-    # Remove "bad" data
+    # Remove duplicates (the BGS_BRIGHT randoms already did this)
     # =================
-    rands = rands[rands["ZWARN"] == 0]
+    # unique_inds = np.unique(rands["TARGETID"], return_index=True)[1]
+    # rands = rands[unique_inds]
 
-    # noinspection PyArgumentList
-    rands_meta = {"num_rand_files": n_rand_files}
-    return rands, rands_meta
+    rands_meta_dict = {"num_rand_files": n_rand_files}
+    return rands, rands_meta_dict
 
 
 default_data_dir = pathlib.Path.home() / "data" / "DESI" / "SV3"
@@ -156,8 +168,13 @@ if __name__ == "__main__":
         help="Filename of Biprateep's stellar mass catalog"
     )
     parser.add_argument(
-        "--bitweight-cat-filename", type=str,
-        default="BGS_BRIGHT_full_noveto.dat.fits",
+        "--clustering-cat-n-filename", type=str,
+        default="BGS_BRIGHT_N_clustering.dat.fits",
+        help="Filename of the catalog containing fiber assignment bitweights"
+    )
+    parser.add_argument(
+        "--clustering-cat-s-filename", type=str,
+        default="BGS_BRIGHT_S_clustering.dat.fits",
         help="Filename of the catalog containing fiber assignment bitweights"
     )
 
@@ -173,7 +190,8 @@ if __name__ == "__main__":
     out_rand_dir = output_dir / "rands"
     fastphot_filename = a.fastphot_filename
     biprateep_filename = a.biprateep_mass_cat_filename
-    bitweight_cat_filename = a.bitweight_cat_filename
+    clustering_cat_n_filename = a.clustering_cat_n_filename
+    clustering_cat_s_filename = a.clustering_cat_s_filename
 
     cleaned_fastphot = clean_data()
     cleaned_rands, rands_meta = clean_rands(n_rand_files=num_rand_files)

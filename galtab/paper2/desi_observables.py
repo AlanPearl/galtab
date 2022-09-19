@@ -169,12 +169,12 @@ class ObservableCalculator:
             print("Average cylinder completeness =", average_completeness)
 
         effective_volume = ms.util.volume(
-            effective_area_sqdeg, [0.1, 0.25], self.cosmo)
+            effective_area_sqdeg, [self.zmin, self.zmax], self.cosmo)
 
         return effective_area_sqdeg, effective_volume, average_completeness
 
     def jack_cic(self, njack):
-        sample2_cut = (self.mask_thresh & ~self.region_masks[njack])
+        sample2_cut = self.mask_thresh & ~self.region_masks[njack]
         sample1_cut = self.mask_z & self.randcic_mask & sample2_cut
         sample2 = self.data_rdx[sample2_cut]
         sample1 = self.data_rdx[sample1_cut]
@@ -235,7 +235,8 @@ class ObservableCalculator:
             self.cic_edges = np.arange(-0.5, np.max(cic) + 1)
         integers = np.arange(np.max(cic) + 1)
         fuzz = galtab.obs.fuzzy_histogram(cic, integers, weights=iip_weights)
-        return np.histogram(integers, self.cic_edges, weights=fuzz)[0]
+        hist = np.histogram(integers, self.cic_edges, weights=fuzz)[0]
+        return hist / hist.sum() / np.diff(self.cic_edges)
 
 
 class RandDensityModelCut:
@@ -312,6 +313,8 @@ class ArrayFloats(argparse.Action):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="desi_observables")
     parser.formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    # IO and performance arguments
+    # ============================
     parser.add_argument(
         "-o", "--output", type=str, default="desi_obs.npz",
         help="Specify the output filename")
@@ -385,8 +388,20 @@ if __name__ == "__main__":
              slice_n=calc.slice_n,
              slice_wp=calc.slice_wp,
              slice_cic=calc.slice_cic,
+             logmmin=calc.logmmin,
+             abs_mr_max=calc.abs_mr_max,
              rp_edges=calc.rp_edges,
              cic_edges=calc.cic_edges,
+             pimax=calc.pimax,
+             proj_search_radius=calc.proj_search_radius,
+             cylinder_half_length=calc.cylinder_half_length,
              average_cylinder_completeness=calc.average_cylinder_completeness,
              effective_area_sqdeg=calc.effective_area_sqdeg,
-             effective_volume=calc.effective_volume)
+             effective_volume=calc.effective_volume,
+             rand_density_cut=calc.randcic_cut,
+             apply_pip_weights=a.apply_pip_weights,
+             zmin=calc.zmin,
+             zmax=calc.zmax,
+             passive_evolved_mags=calc.passive_evolved_mags,
+             cosmo=calc.cosmo
+             )
