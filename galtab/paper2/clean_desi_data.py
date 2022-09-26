@@ -26,11 +26,14 @@ def clean_data():
                 (meta["Z"] > 0) &
                 (meta["SPECTYPE"] == "GALAXY") & (meta["DELTACHI2"] > 25))
     meta = meta[meta_cut]
+    fastphot = fastphot[meta_cut]
 
     # Remove BGS_FAINT (keep BGS_BRIGHT)
     # ==================================
     bright_bit = 1
-    meta = meta[meta["SV3_BGS_TARGET"] & 2 ** bright_bit != 0]
+    bgs_bright_cut = meta["SV3_BGS_TARGET"] & 2 ** bright_bit != 0
+    meta = meta[bgs_bright_cut]
+    fastphot = fastphot[bgs_bright_cut]
 
     # Merge catalogs by TARGETID and remove duplicates
     # ================================================
@@ -156,7 +159,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--everest", action="store_true",
-        help="Name the clean output directory 'everest' instead of 'fuji'"
+        help="Overrides output-dirname to 'clean_fuji'"
     )
     parser.add_argument(
         "--fastphot-filename", type=str,
@@ -178,15 +181,18 @@ if __name__ == "__main__":
         default="BGS_BRIGHT_S_clustering.dat.fits",
         help="Filename of the catalog containing fiber assignment bitweights"
     )
+    parser.add_argument(
+        "--output-dirname", type=str, default="clean_fuji",
+        help="Directory to save the clean data in"
+    )
 
     a = parser.parse_args()
     num_rand_files = a.num_rand_files
     data_dir = pathlib.Path(a.data_dir)
     rand_dir = pathlib.Path(a.rand_dir)
+    output_dirname = a.output_dirname
     if a.everest:
         output_dirname = "clean_everest"
-    else:
-        output_dirname = "clean_fuji"
     output_dir = pathlib.Path(a.data_dir) / output_dirname
     out_rand_dir = output_dir / "rands"
     fastphot_filename = a.fastphot_filename
