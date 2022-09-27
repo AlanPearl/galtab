@@ -221,5 +221,13 @@ class CICTabulator:
         else:
             return p_ncic
 
+    def save(self, filename):
+        np.save(filename, np.array([self], dtype=object))
+
+    @classmethod
+    def load(cls, filename):
+        obj = np.load(filename, allow_pickle=True)[0]
+        return obj
+
 
 GalaxyTabulator.tabulate_cic.__doc__ = CICTabulator.__init__.__doc__
