@@ -16,8 +16,8 @@ from .param_config import pimax, rp_edges, simname
 class ParamSampler:
     def __init__(self, **kwargs):
         self.obs_dir = pathlib.Path(kwargs["obs_dir"])
-        self.obs_filename = kwargs["obs_filename"]
-        self.save_dir = pathlib.Path(kwargs["save_dir"])
+        self.obs_filename = kwargs["OBS_FILENAME"]
+        self.save_dir = pathlib.Path(kwargs["SAVE_DIR"])
         self.simname = kwargs["simname"]
         if kwargs["use_default_halotools_catalogs"]:
             self.version_name = htsm.sim_defaults.default_version_name
@@ -30,8 +30,9 @@ class ParamSampler:
         self.fiducial_params = None
         self.halocat, self.model = None, None
         self.obs = self.load_obs()
+        self.kmax = self.obs.get("cic_kmax", np.array(None)).tolist()
         self.redshift = np.mean([self.obs["zmin"], self.obs["zmax"]])
-        self.magthresh = self.obs["abs_mr_max"]
+        self.magthresh = self.obs["abs_mr_max"].tolist()
         self.model = self.make_model()
         self.cictab, self.wptab = self.load_tabulators()
         self.prior = self.make_prior()
@@ -113,6 +114,7 @@ class ParamSampler:
             self.halocat = htsm.CachedHaloCatalog(
                 simname=self.simname, redshift=self.redshift,
                 version_name=self.version_name)
+            self.halocat.cosmology = self.obs["cosmo"].tolist()
         # model.populate_mock(halocat)
 
     def make_wptab(self):
@@ -128,12 +130,11 @@ class ParamSampler:
     def make_cictab(self):
         self.make_halocat()
 
-        kmax = self.obs.get("cic_kmax")
-        kvals = None if kmax is None else np.arange(kmax) + 1
+        kvals = None if self.kmax is None else np.arange(self.kmax) + 1
         gtab = galtab.GalaxyTabulator(self.halocat, self.model)
         return gtab.tabulate_cic(
-            proj_search_radius=self.obs["proj_search_radius"],
-            cylinder_half_length=self.obs["cylinder_half_length"],
+            proj_search_radius=self.obs["proj_search_radius"].tolist(),
+            cylinder_half_length=self.obs["cylinder_half_length"].tolist(),
             k_vals=kvals)
 
     @staticmethod
@@ -166,7 +167,7 @@ class ParamSampler:
         n, wp = self.wptab.predict(self.model)
         cic, n2, n3 = self.cictab.predict(
             self.model, return_number_densities=True)
-        if self.obs.get("cic_kmax") is None:
+        if self.kmax is None:
             cic = np.histogram(cic, bins=self.obs["cic_edges"])
 
         self.blob.append({"param_dict": param_dict,
@@ -179,16 +180,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="param_sampler")
     parser.formatter_class = argparse.ArgumentDefaultsHelpFormatter
     parser.add_argument(
-        "--obs-dir", type=str, metavar="PATH",
-        help="Directory the observation is saved"
-    )
-    parser.add_argument(
-        "--obs-filename", type=str, metavar="NAME",
+        "OBS_FILENAME", type=str,
         help="Name of the observation file (should end in .npz)"
     )
     parser.add_argument(
-        "--save-dir", type=str, metavar="PATH",
+        "SAVE_DIR", type=str,
         help="Directory to save outputs and tabulations"
+    )
+    parser.add_argument(
+        "--obs-dir", type=str, metavar="PATH", default=".",
+        help="Directory the observation is saved"
     )
     parser.add_argument(
         "--simname", type=str, metavar="NAME", default=simname,
