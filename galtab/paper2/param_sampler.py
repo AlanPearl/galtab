@@ -9,12 +9,8 @@ import halotools.mock_observables as htmo
 import tabcorr
 import nautilus
 
-import mocksurvey as ms
 import galtab
 from .param_config import pimax, rp_edges, simname
-
-# Make sure Corrfunc is installed, or else this will run VERY slow
-assert ms.cf.corrfunc_works
 
 
 class ParamSampler:
