@@ -2,6 +2,7 @@ import numpy as np
 import astropy.cosmology
 
 cosmo = astropy.cosmology.Planck13
+simname = "smdpl"
 proj_search_radius = 2.0
 cylinder_half_length = 10.0
 pimax = 40.0

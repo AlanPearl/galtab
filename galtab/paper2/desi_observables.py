@@ -33,9 +33,11 @@ class ObservableCalculator:
         self.logmmin = kwargs["logmmin"]
         self.abs_mr_max = kwargs["abs_mr_max"]
         self.passive_evolved_mags = kwargs["passive_evolved_mags"]
+        self.purt_factor = kwargs["purity_factor"]
         self.rp_edges = kwargs["rp_edges"]
         self.pimax = kwargs["pimax"]
         self.cic_edges = kwargs["cic_edges"]
+        self.cic_kmax = kwargs["cic_kmax"]
         self.proj_search_radius = kwargs["proj_search_radius"]
         self.cylinder_half_length = kwargs["cylinder_half_length"]
         self.effective_area_sqdeg = kwargs["effective_area_sqdeg"]
@@ -149,7 +151,7 @@ class ObservableCalculator:
             self.proj_search_radius, self.cylinder_half_length,
             self.data_rdx[:, 2])
         randcyl_density = self.randcyl / (np.pi * angles ** 2)
-        model = RandDensityModelCut(randcyl_density)
+        model = RandDensityModelCut(randcyl_density, self.purt_factor)
         randcic_cut = model.optimal_cut()
         if self.verbose:
             print("Optimal rand density cut:", randcic_cut)
@@ -241,7 +243,10 @@ class ObservableCalculator:
 
 class RandDensityModelCut:
     # Functions controlling the norm + erf-tail model, and its purity/completeness
-    def __init__(self, randcyl_density):
+    def __init__(self, randcyl_density, purt_factor=1.0):
+        # weight purity higher than completeness by this factor
+        self.purt_factor = purt_factor
+
         samples = randcyl_density
         bins = np.linspace(np.median(samples) / 2, np.median(samples) * 2, 300)
         self.bin_cens = 0.5 * (bins[:-1] + bins[1:])
@@ -260,12 +265,15 @@ class RandDensityModelCut:
                         np.max(bins) - np.min(bins),
                         10])
         self.bestp, self.bestp_cov = scipy.optimize.curve_fit(
-            self.model_pdf, self.bin_cens, self.hist, p0=self.p0, bounds=self.bounds)
+            self.model_pdf, self.bin_cens, self.hist,
+            p0=self.p0, bounds=self.bounds)
 
     def optimal_cut(self):
-        purt_factor = 5  # weight purity higher than completeness by this factor
-        comp = np.array([self.model_selection_completeness(x, *self.bestp) for x in self.bin_cens])
-        purt = np.array([self.model_selection_purity(x, *self.bestp) for x in self.bin_cens])
+        purt_factor = self.purt_factor
+        comp = np.array([self.model_selection_completeness(x, *self.bestp)
+                         for x in self.bin_cens])
+        purt = np.array([self.model_selection_purity(x, *self.bestp)
+                         for x in self.bin_cens])
         opt_arg = np.nanargmin((1 - comp) ** 2 + (purt_factor*(1 - purt)) ** 2)
         opt_cut = self.bin_cens[opt_arg]
         return opt_cut
@@ -278,8 +286,10 @@ class RandDensityModelCut:
     def model_pdf_erf_component(x, truth, tail_mag, tail_std, tail_slope):
         y_intercept = (1 + tail_slope) * tail_mag
         # line between two points: (0, y_intercept) and (truth, tail_mag)
-        sloped_tail_mag = np.abs(y_intercept + (tail_mag - y_intercept) / truth * x)
-        return sloped_tail_mag * 0.5*(1 - scipy.special.erf((x - truth - tail_std)/tail_std))
+        sloped_tail_mag = y_intercept + (tail_mag - y_intercept) / truth * x
+        sloped_tail_mag[sloped_tail_mag <= 0] = 0
+        return sloped_tail_mag * 0.5*(1 - scipy.special.erf(
+            (x - truth)/tail_std))
 
     def model_pdf(self, x, truth, std, true_mag, tail_mag, tail_std, tail_slope):
         """Model: true_mag * N(truth, std) + sloped_tail_mag * (0.5 - erf(x-truth))"""
@@ -368,11 +378,19 @@ if __name__ == "__main__":
         "--cic-edges", action=ArrayFloats, default=cic_edges,
         help="Bin edges in Ncic for CiC", metavar="X0,X1,...")
     parser.add_argument(
+        "--cic-kmax", type=int, default=None, metavar="K",
+        help="Calculate moments up to kmax (ignore cic-edges if supplied)"
+    )
+    parser.add_argument(
         "--proj-search-radius", type=float, default=proj_search_radius,
         help="Cylinder radius [Mpc/h] for CiC", metavar="X")
     parser.add_argument(
         "--cylinder-half-length", type=float, default=cylinder_half_length,
         help="Helf length of cylinder [Mpc/h] for CiC", metavar="X")
+    parser.add_argument(
+        "--purity-factor", type=float, default=1.0, metavar="X",
+        help="Increase this for a more pure, but less complete, sample"
+    )
     parser.add_argument(
         "--effective-area-sqdeg", type=float, default=None, metavar="X",
         help="Effective area in sq deg (calculated if not supplied)")
@@ -393,6 +411,7 @@ if __name__ == "__main__":
              abs_mr_max=calc.abs_mr_max,
              rp_edges=calc.rp_edges,
              cic_edges=calc.cic_edges,
+             cic_kmax=calc.cic_kmax,
              pimax=calc.pimax,
              proj_search_radius=calc.proj_search_radius,
              cylinder_half_length=calc.cylinder_half_length,
