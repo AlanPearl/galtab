@@ -77,6 +77,10 @@ class GalaxyTabulator:
         self.halo_table = self.halo_table[~useless_halos]
         self.halo_inds = self.tabulate_halo_inds()
 
+        # Unassign the halotools models to preserve pickle-ability :(
+        self.fiducial_model = None
+        self._placeholder_model = None
+
     def populate_placeholders(self):
         return gt.make_placeholder_model(self)
 
