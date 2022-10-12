@@ -56,7 +56,7 @@ class ParamSampler:
         Returns parameter_samples; also saves log_weights, and log_likelihoods
         """
         verbose = self.verbose if verbose is None else verbose
-        sampler.run(verbose=verbose)
+        self.sampler.run(verbose=verbose)
         self.parameter_samples, self.log_weights, \
             self.log_likelihoods = sampler.posterior()
         return self.parameter_samples
