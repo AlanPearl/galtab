@@ -25,7 +25,8 @@ def moments_from_samples(samples, k_vals, weights=None):
 def moments_from_binned_pmf(bin_edges, pmf, k_vals):
     bin_edges = np.sort(bin_edges)
     ceil_edges = np.ceil(bin_edges).astype(int)
-    assert not np.any(bin_edges == ceil_edges)
+    assert not np.any(bin_edges == ceil_edges), \
+        "bin_edges are not allowed to be integers"
 
     ints = np.arange(ceil_edges[0], ceil_edges[-1]).astype(int)
     lengths = np.diff(ceil_edges)

@@ -211,16 +211,15 @@ class ObservableCalculator:
         return n_sample / self.effective_volume / jack_vol_factor
 
     def bin_raw_cic_counts(self, cic, indices, sample1_cut, sample2_cut):
-        iip_weights = None
-        if self.apply_pip_weights_cic:
-            bitmasks1 = self.bitmasks[sample1_cut]
-            bitmasks2 = self.bitmasks[sample2_cut]
-            numbits = bitmasks1.shape[1] * bitmasks1.itemsize * 8
-            # Individual inverse probabilities (IIP)
-            bitsum = np.sum(
-                ms.util.bitsum_hamming_weight(bitmasks1), axis=1)
-            iip_weights = (numbits + 1) / (bitsum + 1)
+        bitmasks1 = self.bitmasks[sample1_cut]
+        bitmasks2 = self.bitmasks[sample2_cut]
+        numbits = bitmasks1.shape[1] * bitmasks1.itemsize * 8
+        # Individual inverse probabilities (IIP)
+        bitsum = np.sum(
+            ms.util.bitsum_hamming_weight(bitmasks1), axis=1)
+        iip_weights = (numbits + 1) / (bitsum + 1)
 
+        if self.apply_pip_weights_cic:
             # Counts = sum of inverse conditional probabilities
             # P(j | i) = P(i and j) / P(i)
             counts = []
@@ -238,7 +237,11 @@ class ObservableCalculator:
         integers = np.arange(np.max(cic) + 1)
         fuzz = galtab.obs.fuzzy_histogram(cic, integers, weights=iip_weights)
         hist = np.histogram(integers, self.cic_edges, weights=fuzz)[0]
-        return hist / hist.sum() / np.diff(self.cic_edges)
+        ans = hist / hist.sum() / np.diff(self.cic_edges)
+        if self.cic_kmax is not None:
+            ans = galtab.moments.moments_from_binned_pmf(
+                self.cic_edges, ans, np.arange(self.cic_kmax) + 1)
+        return ans
 
 
 class RandDensityModelCut:

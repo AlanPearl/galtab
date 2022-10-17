@@ -111,8 +111,9 @@ class GalaxyTabulator:
 
 class CICTabulator:
     def __init__(self, galtabulator, proj_search_radius,
-                 cylinder_half_length, k_vals=None, sample1_selector=None,
-                 sample2_selector=None, seed=None, **kwargs):
+                 cylinder_half_length, k_vals=None, bin_edges=None,
+                 sample1_selector=None, sample2_selector=None, seed=None,
+                 **kwargs):
         """
         Initialize a CICTabulator
 
@@ -126,6 +127,7 @@ class CICTabulator:
         proj_search_radius : float
         cylinder_half_length : float
         k_vals : Optional[np.ndarray]
+        bin_edges : Optional[np.ndarray]
         sample1_selector : Optional[callable]
         sample2_selector : Optional[callable]
         seed : Optional[int]
@@ -135,6 +137,7 @@ class CICTabulator:
         """
         self.galtabulator = galtabulator
         self.k_vals = k_vals
+        self.bin_edges = bin_edges
         self.sample1_selector = sample1_selector
         self.sample2_selector = sample2_selector
         self.rs = np.random.RandomState(seed)
@@ -186,9 +189,14 @@ class CICTabulator:
         n1 = n2 = None
         if return_number_densities:
             cic, n1, n2 = cic
+
+        if self.bin_edges is not None:
+            hist = np.histogram(
+                np.arange(len(cic)), self.bin_edges, weights=cic)[0]
+            cic = hist / hist.sum() / np.diff(self.bin_edges)
         if self.k_vals is not None:
             cic = moments.moments_from_samples(
-                np.arange(len(cic)), self.k_vals, cic)
+                np.arange(len(cic)), self.k_vals, weights=cic)
         if return_number_densities:
             return cic, n1, n2
         else:

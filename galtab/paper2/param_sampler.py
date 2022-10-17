@@ -62,6 +62,7 @@ class ParamSampler:
         return self.parameter_samples
 
     def save(self, filename):
+        self.model = None
         np.save(filename, np.array([self], dtype=object))
 
     @classmethod
@@ -135,7 +136,7 @@ class ParamSampler:
         return gtab.tabulate_cic(
             proj_search_radius=self.obs["proj_search_radius"].tolist(),
             cylinder_half_length=self.obs["cylinder_half_length"].tolist(),
-            k_vals=kvals)
+            k_vals=kvals, bin_edges=self.obs["cic_edges"])
 
     @staticmethod
     def make_prior():
@@ -167,8 +168,6 @@ class ParamSampler:
         n, wp = self.wptab.predict(self.model)
         cic, n2, n3 = self.cictab.predict(
             self.model, return_number_densities=True)
-        if self.kmax is None:
-            cic = np.histogram(cic, bins=self.obs["cic_edges"])
 
         self.blob.append({"param_dict": param_dict,
                           "n": n, "n2": n2, "n3": n3,
