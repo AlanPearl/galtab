@@ -190,13 +190,13 @@ class CICTabulator:
         if return_number_densities:
             cic, n1, n2 = cic
 
-        if self.bin_edges is not None:
-            hist = np.histogram(
-                np.arange(len(cic)), self.bin_edges, weights=cic)[0]
-            cic = hist / hist.sum() / np.diff(self.bin_edges)
         if self.k_vals is not None:
             cic = moments.moments_from_samples(
                 np.arange(len(cic)), self.k_vals, weights=cic)
+        elif self.bin_edges is not None:
+            hist = np.histogram(
+                np.arange(len(cic)), self.bin_edges, weights=cic)[0]
+            cic = hist / hist.sum() / np.diff(self.bin_edges)
         if return_number_densities:
             return cic, n1, n2
         else:
