@@ -44,10 +44,11 @@ class ParamSampler:
         self.log_likelihoods = None
         self.blob = []
 
-        n_start = self.obs["slice_n"].tolist().start
-        wp_start = self.obs["slice_wp"].tolist().start
-        cic_start = self.obs["slice_cic"].tolist().start
-        assert n_start < wp_start < cic_start
+        n_slice = self.obs["slice_n"].tolist()
+        wp_slice = self.obs["slice_wp"].tolist()
+        cic_slice = self.obs["slice_cic"].tolist()
+        self.len_cic = cic_slice.stop - cic_slice.start
+        assert n_slice.start < wp_slice.start < cic_slice.start
 
     def run(self, verbose=None):
         """
@@ -168,6 +169,9 @@ class ParamSampler:
         n, wp = self.wptab.predict(self.model)
         cic, n2, n3 = self.cictab.predict(
             self.model, return_number_densities=True)
+
+        if np.isnan(cic[0]):
+            cic = np.zeros(self.len_cic)
 
         self.blob.append({"param_dict": param_dict,
                           "n": n, "n2": n2, "n3": n3,

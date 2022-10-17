@@ -232,7 +232,7 @@ class ObservableCalculator:
 
         # Assign fuzzy weights to nearest integers, then bin with cic_edges
         # =================================================================
-        if self.cic_edges is None or self.cic_kmax is None:
+        if self.cic_edges is None or self.cic_kmax is not None:
             self.cic_edges = np.arange(-0.5, np.max(cic) + 1)
         integers = np.arange(np.max(cic) + 1)
         fuzz = galtab.obs.fuzzy_histogram(cic, integers, weights=iip_weights)

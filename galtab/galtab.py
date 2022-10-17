@@ -113,7 +113,7 @@ class CICTabulator:
     def __init__(self, galtabulator, proj_search_radius,
                  cylinder_half_length, k_vals=None, bin_edges=None,
                  sample1_selector=None, sample2_selector=None, seed=None,
-                 **kwargs):
+                 max_ncic=int(1e5), **kwargs):
         """
         Initialize a CICTabulator
 
@@ -130,6 +130,7 @@ class CICTabulator:
         bin_edges : Optional[np.ndarray]
         sample1_selector : Optional[callable]
         sample2_selector : Optional[callable]
+        max_ncic : Optional[int]
         seed : Optional[int]
 
         Note: Remaining keyword arguments are passed to halotools' counts-in-
@@ -140,6 +141,7 @@ class CICTabulator:
         self.bin_edges = bin_edges
         self.sample1_selector = sample1_selector
         self.sample2_selector = sample2_selector
+        self.max_ncic = max_ncic
         self.rs = np.random.RandomState(seed)
 
         self.sample1_inds = slice(None)
@@ -217,13 +219,16 @@ class CICTabulator:
                   mc_num_arrays[self.sample2_inds][indices["i2"]])
 
         numbins = np.max(ncic_arrays) + 1
-        ncic_arrays1 = ncic_arrays + (numbins * np.arange(n_mc))
+        if numbins < self.max_ncic:
+            ncic_arrays1 = ncic_arrays + (numbins * np.arange(n_mc))
 
-        ncic_hists = np.bincount(
-            ncic_arrays1.ravel(), weights=mc_num_arrays.ravel(),
-            minlength=numbins * n_mc).reshape(n_mc, -1)
-        p_ncic_configs = ncic_hists / np.sum(mc_num_arrays, axis=0)[:, None]
-        p_ncic = np.nanmean(p_ncic_configs, axis=0)
+            ncic_hists = np.bincount(
+                ncic_arrays1.ravel(), weights=mc_num_arrays.ravel(),
+                minlength=numbins * n_mc).reshape(n_mc, -1)
+            p_ncic_configs = ncic_hists / np.sum(mc_num_arrays, axis=0)[:, None]
+            p_ncic = np.nanmean(p_ncic_configs, axis=0)
+        else:
+            p_ncic = np.array([np.nan])
 
         if return_number_densities:
             vol = np.product(self.galtabulator.halocat.Lbox)
