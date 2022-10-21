@@ -33,6 +33,7 @@ class ObservableCalculator:
         self.logmmin = kwargs["logmmin"]
         self.abs_mr_max = kwargs["abs_mr_max"]
         self.passive_evolved_mags = kwargs["passive_evolved_mags"]
+        self.kuan_mags = kwargs["kuan_mags"]
         self.purt_factor = kwargs["purity_factor"]
         self.rp_edges = kwargs["rp_edges"]
         self.pimax = kwargs["pimax"]
@@ -114,7 +115,9 @@ class ObservableCalculator:
         if self.logmmin > -np.inf:
             mask_thresh &= fastphot["logmass"] >= self.logmmin
         if self.abs_mr_max < np.inf:
-            if self.passive_evolved_mags:
+            if self.kuan_mags:
+                abs_mr = fastphot["abs_rmag_0p1_kuan"]
+            elif self.passive_evolved_mags:
                 abs_mr = fastphot["abs_rmag_0p1_evolved"]
             else:
                 abs_mr = fastphot["abs_rmag_0p1"]
@@ -370,7 +373,10 @@ if __name__ == "__main__":
         help="Upper limit on absolute R-mand magnitude (e.g. -19.5)")
     parser.add_argument(
         "--passive-evolved-mags", action="store_true",
-        help="Apply Q=1.62 passive evolution for the M_R threshold cut")
+        help="Apply passive evolution for the M_R threshold cut")
+    parser.add_argument(
+        "--kuan-mags", action="store_true",
+        help="Apply passive evolution + Petrosian mag correction")
     parser.add_argument(
         "--rp-edges", action=ArrayFloats, default=rp_edges,
         help="Bin edges in rp [Mpc/h] for wp(rp)", metavar="X0,X1,...")
@@ -426,5 +432,6 @@ if __name__ == "__main__":
              zmin=calc.zmin,
              zmax=calc.zmax,
              passive_evolved_mags=calc.passive_evolved_mags,
+             kuan_mags=calc.kuan_mags,
              cosmo=calc.cosmo
              )

@@ -10,7 +10,7 @@ import tabcorr
 import nautilus
 
 import galtab
-from .param_config import pimax, rp_edges, simname
+from .param_config import simname
 
 
 class ParamSampler:
@@ -26,13 +26,20 @@ class ParamSampler:
 
         self.n_live = kwargs["n_live"]
         self.verbose = kwargs["verbose"]
+        self.temp_wptab = kwargs.get("temp_wptab", False)
 
         self.fiducial_params = None
         self.halocat, self.model = None, None
         self.obs = self.load_obs()
+        self.proj_search_radius = self.obs["proj_search_radius"].tolist()
+        self.cylinder_half_length = self.obs["cylinder_half_length"].tolist()
+        self.pimax = self.obs["pimax"].tolist()
+        self.cic_edges = self.obs["cic_edges"]
+        self.rp_edges = self.obs["rp_edges"]
         self.kmax = self.obs.get("cic_kmax", np.array(None)).tolist()
         self.redshift = np.mean([self.obs["zmin"], self.obs["zmax"]])
         self.magthresh = self.obs["abs_mr_max"].tolist()
+
         self.model = self.make_model()
         self.cictab, self.wptab = self.load_tabulators()
         self.prior = self.make_prior()
@@ -84,11 +91,12 @@ class ParamSampler:
         else:
             cictab = self.make_cictab()
             cictab.save(cictab_file)
-        if wptab_file.is_file():
+        if wptab_file.is_file() and not self.temp_wptab:
             wptab = tabcorr.TabCorr.read(wptab_file)
         else:
             wptab = self.make_wptab()
-            wptab.write(wptab_file)
+            if not self.temp_wptab:
+                wptab.write(wptab_file)
         return cictab, wptab
 
     def load_obs(self):
@@ -123,7 +131,7 @@ class ParamSampler:
         self.make_halocat()
 
         halotab = tabcorr.TabCorr.tabulate(
-            self.halocat, htmo.wp, rp_edges, pi_max=pimax,
+            self.halocat, htmo.wp, self.rp_edges, pi_max=self.pimax,
             prim_haloprop_key="halo_mvir", prim_haloprop_bins=100,
             sec_haloprop_key="halo_nfw_conc",
             sec_haloprop_percentile_bins=2, project_xyz=True)
@@ -135,9 +143,9 @@ class ParamSampler:
         kvals = None if self.kmax is None else np.arange(self.kmax) + 1
         gtab = galtab.GalaxyTabulator(self.halocat, self.model)
         return gtab.tabulate_cic(
-            proj_search_radius=self.obs["proj_search_radius"].tolist(),
-            cylinder_half_length=self.obs["cylinder_half_length"].tolist(),
-            k_vals=kvals, bin_edges=self.obs["cic_edges"])
+            proj_search_radius=self.proj_search_radius,
+            cylinder_half_length=self.cylinder_half_length,
+            k_vals=kvals, bin_edges=self.cic_edges)
 
     @staticmethod
     def make_prior():
@@ -166,8 +174,9 @@ class ParamSampler:
 
     def predict_observables(self, param_dict):
         self.model.param_dict.update(param_dict)
-        n, wp = self.wptab.predict(self.model)
-        cic, n2, n3 = self.cictab.predict(
+        n, wp = self.predict_wp(
+            self.model, return_number_density=True)
+        cic, n2, n3 = self.predict_cic(
             self.model, return_number_densities=True)
 
         if np.isnan(cic[0]):
@@ -177,6 +186,39 @@ class ParamSampler:
                           "n": n, "n2": n2, "n3": n3,
                           "wp": wp, "cic": cic})
         return np.array([n, *wp, *cic])
+
+    def predict_wp(self, model, return_number_density=False):
+        n, wp = self.wptab.predict(model)
+        if return_number_density:
+            return n, wp
+        else:
+            return wp
+
+    def predict_cic(self, model, return_number_densities=False):
+        return self.cictab.predict(
+            model, return_number_densities=return_number_densities)
+
+    def predict_cic_halotools(self, model, num_threads=1):
+        if "mock" in model.__dict__:
+            model.mock.populate(self.halocat)
+        else:
+            model.populate_mock()
+
+        gal = model.mock.galaxies
+        xyz = htmo.return_xyz_formatted_array(
+            gal["x"], gal["y"], gal["z"], period=self.halocat.Lbox,
+            cosmology=self.halocat.cosmology, redshift=self.redshift,
+            velocity=gal["vz"], velocity_distortion_dimension="z")
+        counts = htmo.counts_in_cylinders(
+            xyz, xyz, self.proj_search_radius, self.cylinder_half_length,
+            period=self.halocat.Lbox, num_threads=num_threads)
+
+        if self.kmax is None:
+            hist = np.histogram(counts, bins=self.cic_edges)[0]
+            return hist / len(xyz) / np.diff(self.cic_edges)
+        else:
+            return galtab.moments.moments_from_samples(
+                counts, np.arange(self.kmax) + 1)
 
 
 if __name__ == "__main__":
