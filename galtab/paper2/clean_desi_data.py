@@ -63,12 +63,21 @@ def clean_data():
     # Add only the necessary data from fastphot and biprateep_masses
     # ==============================================================
     # No need to subtract KCORR_SDSS_R -- it's already k-corrected to z=0.1
-    h = 0.7  # Use h-scaled magnitude (h=0.7 hard-coded into FastSpecFit)
-    abs_rmag_0p1 = fastphot["ABSMAG_SDSS_R"] - 5 * np.log10(h)
+    # Store M_R - 5log(h) (i.e. h=1, but FastSpecFit used h=0.7)
+    abs_rmag_0p1 = fastphot["ABSMAG_SDSS_R"] - 5 * np.log10(0.7)
 
     # New column using passive evolution to z=0.1
-    q = 1.62  # table 3 - Blanton+ 2003 (The Galaxy Luminosity Function...)
-    abs_rmag_0p1_evolved = abs_rmag_0p1 + q * (meta["Z"] - 0.1)
+    # q = 1.62  # table 3 - Blanton+ 2003 (The Galaxy Luminosity Function...)
+    # abs_rmag_0p1_evolved = abs_rmag_0p1 + q * (meta["Z"] - 0.1)
+
+    # Parameters for evolution correction to match Kuan (new version)
+    q0, qz0, q1 = 2, 0.1, -1
+    ec = q0 * (1 + q1 * (meta["Z"] - qz0)) * (meta["Z"] - qz0)
+    abs_rmag_0p1_evolved = abs_rmag_0p1 + ec
+
+    # Empirical correction for the Petrosian magnitudes Kuan used
+    petro_mag_corr = 0.23 * meta["Z"] + 0.10
+    abs_rmag_0p1_kuan = abs_rmag_0p1_evolved + petro_mag_corr
 
     # Convert bitweights from signed to unsigned ints to make myself happy
     # ====================================================================
@@ -80,11 +89,13 @@ def clean_data():
     # ==================================
     names = list(meta.dtype.names) + ["abs_rmag_0p1",
                                       "abs_rmag_0p1_evolved",
+                                      "abs_rmag_0p1_kuan",
                                       "logmass",
                                       "bitweights"]
     values = [meta[name] for name in meta.dtype.names] + \
              [abs_rmag_0p1,
               abs_rmag_0p1_evolved,
+              abs_rmag_0p1_kuan,
               biprateep_masses["logmass"],
               bitweights]
     dtypes = [value.dtype.descr[0][1] for value in values]
