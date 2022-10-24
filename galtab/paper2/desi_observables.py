@@ -405,33 +405,34 @@ if __name__ == "__main__":
         help="Effective area in sq deg (calculated if not supplied)")
 
     a = parser.parse_args()
-    output_file = a.output
+    output_file = a.__dict__.pop("output")
 
     calc = ObservableCalculator(**a.__dict__, cosmo=cosmo)
     mean, cov = calc()
 
-    np.savez(output_file,
-             mean=mean,
-             cov=cov,
-             slice_n=calc.slice_n,
-             slice_wp=calc.slice_wp,
-             slice_cic=calc.slice_cic,
-             logmmin=calc.logmmin,
-             abs_mr_max=calc.abs_mr_max,
-             rp_edges=calc.rp_edges,
-             cic_edges=calc.cic_edges,
-             cic_kmax=calc.cic_kmax,
-             pimax=calc.pimax,
-             proj_search_radius=calc.proj_search_radius,
-             cylinder_half_length=calc.cylinder_half_length,
-             average_cylinder_completeness=calc.average_cylinder_completeness,
-             effective_area_sqdeg=calc.effective_area_sqdeg,
-             effective_volume=calc.effective_volume,
-             rand_density_cut=calc.randcic_cut,
-             apply_pip_weights=a.apply_pip_weights,
-             zmin=calc.zmin,
-             zmax=calc.zmax,
-             passive_evolved_mags=calc.passive_evolved_mags,
-             kuan_mags=calc.kuan_mags,
-             cosmo=calc.cosmo
-             )
+    np.savez(
+        output_file,
+        mean=mean,
+        cov=cov,
+        slice_n=calc.slice_n,
+        slice_wp=calc.slice_wp,
+        slice_cic=calc.slice_cic,
+        logmmin=calc.logmmin,
+        abs_mr_max=calc.abs_mr_max,
+        rp_edges=calc.rp_edges,
+        cic_edges=calc.cic_edges,
+        cic_kmax=calc.cic_kmax,
+        pimax=calc.pimax,
+        proj_search_radius=calc.proj_search_radius,
+        cylinder_half_length=calc.cylinder_half_length,
+        average_cylinder_completeness=calc.average_cylinder_completeness,
+        effective_area_sqdeg=calc.effective_area_sqdeg,
+        effective_volume=calc.effective_volume,
+        rand_density_cut=calc.randcic_cut,
+        apply_pip_weights=a.apply_pip_weights,
+        zmin=calc.zmin,
+        zmax=calc.zmax,
+        passive_evolved_mags=calc.passive_evolved_mags,
+        kuan_mags=calc.kuan_mags,
+        cosmo=calc.cosmo
+    )

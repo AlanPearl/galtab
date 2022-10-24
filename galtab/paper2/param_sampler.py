@@ -26,7 +26,7 @@ class ParamSampler:
 
         self.n_live = kwargs["n_live"]
         self.verbose = kwargs["verbose"]
-        self.temp_wptab = kwargs.get("temp_wptab", False)
+        self.temp_cictab = kwargs.get("temp_cictab", False)
 
         self.fiducial_params = None
         self.halocat, self.model = None, None
@@ -86,17 +86,22 @@ class ParamSampler:
         self.save_dir.mkdir(parents=True, exist_ok=True)
         cictab_file = self.save_dir / "cictab.npy"
         wptab_file = self.save_dir / "wptab.hdf5"
-        if cictab_file.is_file():
+
+        if cictab_file.is_file() and not self.temp_cictab:
             cictab = galtab.CICTabulator.load(cictab_file)
         else:
             cictab = self.make_cictab()
-            cictab.save(cictab_file)
-        if wptab_file.is_file() and not self.temp_wptab:
-            wptab = tabcorr.TabCorr.read(wptab_file)
-        else:
-            wptab = self.make_wptab()
-            if not self.temp_wptab:
-                wptab.write(wptab_file)
+            if not self.temp_cictab:
+                cictab.save(cictab_file)
+
+        wptab = None
+        if not self.temp_cictab:
+            if wptab_file.is_file():
+                wptab = tabcorr.TabCorr.read(wptab_file)
+            else:
+                wptab = self.make_wptab()
+                if not self.temp_cictab:
+                    wptab.write(wptab_file)
         return cictab, wptab
 
     def load_obs(self):
@@ -248,10 +253,22 @@ if __name__ == "__main__":
         "-v", "--verbose", action="store_true"
     )
     parser.add_argument(
+        "-t", "--tabulate-only", action="store_true",
+        help="Don't run the sampler"
+    )
+    parser.add_argument(
+        "--temp-cictab", action="store_true",
+        help="Create a temporary CICTabulator, and don't save it"
+    )
+    parser.add_argument(
         "--use-default-halotools-catalogs", action="store_true"
     )
 
     a = parser.parse_args()
+    tabulate_only = a.__dict__.pop("tabulate_only")
+
     sampler = ParamSampler(**a.__dict__)
-    sampler.run()
-    sampler.save(sampler.save_dir / "sampler.npy")
+
+    if not tabulate_only:
+        sampler.run()
+        sampler.save(sampler.save_dir / "sampler.npy")
