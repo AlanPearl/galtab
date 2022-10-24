@@ -28,7 +28,7 @@ class GalaxyTabulator:
             Catalog containing the halos to populate galaxies on top of
         fiducial_model : htem.ModelFactory
             The model used to calculate the number of placeholder galaxies
-        n_mc : int
+        n_mc : int (default = 10)
             Number of Monte-Carlo realizations to combine
         min_quant : float (default = 0.001)
             The minimum quantile of galaxies as a function of the model's
@@ -185,9 +185,9 @@ class CICTabulator:
         # Remove self-counting!
         self.indices = self.indices[self.indices["i1"] != self.indices["i2"]]
 
-    def predict(self, model, return_number_densities=False):
+    def predict(self, model, return_number_densities=False, n_mc=None):
         cic = self.calc_cic(
-            model, return_number_densities=return_number_densities)
+            model, return_number_densities=return_number_densities, n_mc=n_mc)
         n1 = n2 = None
         if return_number_densities:
             cic, n1, n2 = cic
@@ -204,14 +204,19 @@ class CICTabulator:
         else:
             return cic
 
-    def calc_cic(self, model, return_number_densities=False):
-        n1, n_mc = self.n1, self.n_mc
+    def calc_cic(self, model, return_number_densities=False, n_mc=None):
+        if n_mc is None:
+            n_mc = self.n_mc
+            mc_rands = self.mc_rands
+        else:
+            mc_rands = self.mc_rands[:, :n_mc]
+        n1 = self.n1
         indices = self.indices
         weights = self.galtabulator.calc_weights(model)
         previous_ints = weights.astype(int)
         next_int_probs = weights % 1
 
-        mc_num_arrays = previous_ints[:, None] + (self.mc_rands <
+        mc_num_arrays = previous_ints[:, None] + (mc_rands <
                                                   next_int_probs[:, None])
 
         ncic_arrays = np.zeros((n1, n_mc), dtype=int)

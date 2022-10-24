@@ -26,10 +26,14 @@ class ParamSampler:
 
         self.n_live = kwargs["n_live"]
         self.verbose = kwargs["verbose"]
-        self.temp_cictab = kwargs.get("temp_cictab", False)
+        self.temp_cictab = kwargs["temp_cictab"]
+        self.n_mc = kwargs["n_mc"]
+        self.min_quant = kwargs["min_quant"]
+        self.max_quant = kwargs["max_quant"]
+        self.seed = kwargs["seed"]
 
         self.fiducial_params = None
-        self.halocat, self.model = None, None
+        self.halocat = kwargs.get("halocat")
         self.obs = self.load_obs()
         self.proj_search_radius = self.obs["proj_search_radius"].tolist()
         self.cylinder_half_length = self.obs["cylinder_half_length"].tolist()
@@ -97,11 +101,11 @@ class ParamSampler:
         wptab = None
         if not self.temp_cictab:
             if wptab_file.is_file():
-                wptab = tabcorr.TabCorr.read(wptab_file)
+                wptab = tabcorr.TabCorr.read(str(wptab_file))
             else:
                 wptab = self.make_wptab()
                 if not self.temp_cictab:
-                    wptab.write(wptab_file)
+                    wptab.write(str(wptab_file))
         return cictab, wptab
 
     def load_obs(self):
@@ -146,7 +150,9 @@ class ParamSampler:
         self.make_halocat()
 
         kvals = None if self.kmax is None else np.arange(self.kmax) + 1
-        gtab = galtab.GalaxyTabulator(self.halocat, self.model)
+        gtab = galtab.GalaxyTabulator(
+            self.halocat, self.model, n_mc=self.n_mc, min_quant=self.min_quant,
+            max_quant=self.max_quant, seed=self.seed)
         return gtab.tabulate_cic(
             proj_search_radius=self.proj_search_radius,
             cylinder_half_length=self.cylinder_half_length,
@@ -199,17 +205,17 @@ class ParamSampler:
         else:
             return wp
 
-    def predict_cic(self, model, return_number_densities=False):
+    def predict_cic(self, model, return_number_densities=False, n_mc=None):
         return self.cictab.predict(
-            model, return_number_densities=return_number_densities)
+            model, return_number_densities=return_number_densities, n_mc=n_mc)
 
     def predict_cic_halotools(self, model, num_threads=1):
         if "mock" in model.__dict__:
-            model.mock.populate(self.halocat)
+            model.mock.populate()
         else:
-            model.populate_mock()
+            model.populate_mock(self.halocat)
 
-        gal = model.mock.galaxies
+        gal = model.mock.galaxy_table
         xyz = htmo.return_xyz_formatted_array(
             gal["x"], gal["y"], gal["z"], period=self.halocat.Lbox,
             cosmology=self.halocat.cosmology, redshift=self.redshift,
@@ -248,6 +254,22 @@ if __name__ == "__main__":
     parser.add_argument(
         "-n", "--n-live", type=int, metavar="N", default=1000,
         help="Number of 'live points' to sample"
+    )
+    parser.add_argument(
+        "--n-mc", type=int, metavar="N", default=10,
+        help="GalaxyTabulator parameter"
+    )
+    parser.add_argument(
+        "--min-quant", type=float, metavar="X", default=0.001,
+        help="GalaxyTabulator parameter"
+    )
+    parser.add_argument(
+        "--max-quant", type=float, metavar="X", default=0.9999,
+        help="GalaxyTabulator parameter"
+    )
+    parser.add_argument(
+        "--seed", type=int, metavar="N", default=None,
+        help="GalaxyTabulator parameter"
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true"
