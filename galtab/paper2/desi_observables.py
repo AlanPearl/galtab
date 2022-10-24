@@ -24,8 +24,8 @@ class ObservableCalculator:
         self.wp_rand_frac = kwargs["wp_rand_frac"]
         self.verbose = kwargs["verbose"]
         self.first_n = kwargs["first_n"]
-        self.apply_pip_weights_wp = kwargs["apply_pip_weights"]
-        self.apply_pip_weights_cic = kwargs["apply_pip_weights"]
+        self.apply_pip_weights_wp = not kwargs["dont_apply_pip_weights"]
+        self.apply_pip_weights_cic = not kwargs["dont_apply_pip_weights"]
         # Cosmology, sample, and metric parameters
         self.cosmo = kwargs["cosmo"]
         self.zmin = kwargs["zmin"]
@@ -340,8 +340,12 @@ if __name__ == "__main__":
         default=pathlib.Path.home() / "data" / "DESI" / "SV3" / "clean_fuji",
         help="Directory containing the data (fastphot.npy file)")
     parser.add_argument(
+        "--dont-apply-pip-weights", action="store_true",
+        help="Don't use PIP weighting for wp and CiC"
+    )
+    parser.add_argument(
         "--apply-pip-weights", action="store_true",
-        help="Use PIP weighting to calculate wp and CiC")
+        help="Ignored. Use --dont-apply-pip-weights if necessary.")
     parser.add_argument(
         "-p", "--progress", action="store_true",
         help="Show progress with tqdm")
