@@ -99,13 +99,11 @@ class ParamSampler:
                 cictab.save(cictab_file)
 
         wptab = None
-        if not self.temp_cictab:
-            if wptab_file.is_file():
-                wptab = tabcorr.TabCorr.read(str(wptab_file))
-            else:
-                wptab = self.make_wptab()
-                if not self.temp_cictab:
-                    wptab.write(str(wptab_file))
+        if wptab_file.is_file():
+            wptab = tabcorr.TabCorr.read(str(wptab_file))
+        elif not self.temp_cictab:
+            wptab = self.make_wptab()
+            wptab.write(str(wptab_file))
         return cictab, wptab
 
     def load_obs(self):
@@ -209,7 +207,38 @@ class ParamSampler:
         return self.cictab.predict(
             model, return_number_densities=return_number_densities, n_mc=n_mc)
 
-    def predict_cic_halotools(self, model, num_threads=1):
+    def predict_wp_halotools(self, model, return_number_density=False,
+                             num_threads=1):
+        xyz = self.populate_halotools(model)
+        wp = htmo.wp(
+            xyz, self.rp_edges, self.pimax,
+            period=self.halocat.Lbox, num_threads=num_threads)
+
+        if return_number_density:
+            return wp, len(xyz) / np.product(self.halocat.Lbox)
+        else:
+            return wp
+
+    def predict_cic_halotools(self, model, return_number_density=False,
+                              num_threads=1):
+        xyz = self.populate_halotools(model)
+        counts = htmo.counts_in_cylinders(
+            xyz, xyz, self.proj_search_radius, self.cylinder_half_length,
+            period=self.halocat.Lbox, num_threads=num_threads)
+
+        if self.kmax is None:
+            hist = np.histogram(counts, bins=self.cic_edges)[0]
+            cic = hist / len(xyz) / np.diff(self.cic_edges)
+        else:
+            cic = galtab.moments.moments_from_samples(
+                counts, np.arange(self.kmax) + 1)
+
+        if return_number_density:
+            return cic, len(xyz) / np.product(self.halocat.Lbox)
+        else:
+            return cic
+
+    def populate_halotools(self, model):
         if "mock" in model.__dict__:
             model.mock.populate()
         else:
@@ -220,16 +249,7 @@ class ParamSampler:
             gal["x"], gal["y"], gal["z"], period=self.halocat.Lbox,
             cosmology=self.halocat.cosmology, redshift=self.redshift,
             velocity=gal["vz"], velocity_distortion_dimension="z")
-        counts = htmo.counts_in_cylinders(
-            xyz, xyz, self.proj_search_radius, self.cylinder_half_length,
-            period=self.halocat.Lbox, num_threads=num_threads)
-
-        if self.kmax is None:
-            hist = np.histogram(counts, bins=self.cic_edges)[0]
-            return hist / len(xyz) / np.diff(self.cic_edges)
-        else:
-            return galtab.moments.moments_from_samples(
-                counts, np.arange(self.kmax) + 1)
+        return xyz
 
 
 if __name__ == "__main__":
