@@ -223,7 +223,7 @@ class ObservableCalculator:
         iip_weights = (numbits + 1) / (bitsum + 1)
 
         if self.apply_pip_weights_cic:
-            # Counts = sum of inverse conditional probabilities
+            # Counts = sum of inverse conditional probabilities (ICP)
             # P(j | i) = P(i and j) / P(i)
             counts = []
             for i in range(len(bitmasks1)):
