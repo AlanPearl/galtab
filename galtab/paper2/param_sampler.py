@@ -224,7 +224,7 @@ class ParamSampler:
         xyz = self.populate_halotools(model)
         counts = htmo.counts_in_cylinders(
             xyz, xyz, self.proj_search_radius, self.cylinder_half_length,
-            period=self.halocat.Lbox, num_threads=num_threads)
+            period=self.halocat.Lbox, num_threads=num_threads) - 1
 
         if self.kmax is None:
             hist = np.histogram(counts, bins=self.cic_edges)[0]
