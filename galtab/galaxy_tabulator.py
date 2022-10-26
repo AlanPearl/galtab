@@ -13,10 +13,9 @@ def placeholder_occupation(self, **kwargs):
     if self._upper_occupation_bound > 1:
         occupation = scipy.stats.poisson.ppf(self.max_quant, mu=mean_occ).astype(int)
     else:
-        occupation = 1
-    # occupation = np.ceil(mean_occ / self.max_prob).astype(int)
+        occupation = np.where(mean_occ >= self.min_prob, 1, 0)
 
-    return np.where(mean_occ >= self.min_prob, occupation, 0)
+    return occupation
 
 
 # noinspection PyProtectedMember

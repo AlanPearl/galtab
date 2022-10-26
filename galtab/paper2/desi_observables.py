@@ -190,7 +190,7 @@ class ObservableCalculator:
             self.cylinder_half_length, return_indices=True,
             progress=self.progress, tqdm_kwargs=dict(leave=False),
             num_threads=self.num_threads)
-        cic -= 1
+        cic -= 1  # <-- remove self-counting in cic array, but not in indices
         return self.bin_raw_cic_counts(cic, indices, sample1_cut, sample2_cut)
 
     def jack_wp(self, njack):
@@ -231,7 +231,7 @@ class ObservableCalculator:
                     bitmasks1[i] & bitmasks2[indices[i]]), axis=1)
                 icp_weights = (bitsum[i] + 1) / (pair_bitsums + 1)
                 counts.append(icp_weights.sum())
-            cic = counts
+            cic = np.array(counts) - 1  # <-- remove self-counting indices
 
         # Assign fuzzy weights to nearest integers, then bin with cic_edges
         # =================================================================
