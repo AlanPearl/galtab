@@ -35,7 +35,8 @@ class AccuracyRuntimeTester:
         self.ht_results = None
 
     def save(self, file):
-        arr = np.array([self.gt_results, self.ht_results], dtype=object)
+        arr = np.array([self.gt_results.to_dict(), self.ht_results.to_dict()],
+                       dtype=object)
         np.save(file, arr)
 
     def run_ht_trials(self):
@@ -126,6 +127,8 @@ if __name__ == "__main__":
     output = "accuracy_runtime_results.npy"
     try:
         past_gt_results, past_ht_results = np.load(output, allow_pickle=True)
+        past_gt_results = pd.DataFrame(past_gt_results)
+        past_ht_results = pd.DataFrame(past_ht_results)
     except FileNotFoundError:
         past_gt_results, past_ht_results = None, None
 
