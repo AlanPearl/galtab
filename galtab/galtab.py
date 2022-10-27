@@ -136,6 +136,8 @@ class CICTabulator:
         Note: Remaining keyword arguments are passed to halotools' counts-in-
         cylinders function.
         """
+        assert sample1_selector is None, "Parameter not implemented yet"
+        assert sample2_selector is None, "Parameter not implemented yet"
         self.galtabulator = galtabulator
         self.k_vals = k_vals
         self.bin_edges = bin_edges
@@ -183,6 +185,7 @@ class CICTabulator:
         self.indices = htmo.counts_in_cylinders(**kwargs)[1]
 
         # Remove self-counting!
+        # TODO: Do this in a way that doesn't break if sample1 != sample2
         self.indices = self.indices[self.indices["i1"] != self.indices["i2"]]
 
     def predict(self, model, return_number_densities=False, n_mc=None):
@@ -221,7 +224,8 @@ class CICTabulator:
 
         ncic_arrays = np.zeros((n1, n_mc), dtype=int)
         np.add.at(ncic_arrays, indices["i1"],
-                  mc_num_arrays[self.sample2_inds][indices["i2"]])
+                  mc_num_arrays[indices["i2"]])
+        # mc_num_arrays[self.sample2_inds][indices["i2"]])
 
         numbins = np.max(ncic_arrays) + 1
         if numbins < self.max_ncic:
@@ -237,9 +241,12 @@ class CICTabulator:
 
         if return_number_densities:
             vol = np.product(self.galtabulator.halocat.Lbox)
-            weights1 = weights[self.sample1_inds]
-            weights2 = weights[self.sample2_inds]
-            return p_ncic, np.sum(weights1)/vol, np.sum(weights2)/vol
+            weights1 = weights  # [self.sample1_inds]
+            n1 = np.sum(weights1) / vol
+            # weights2 = weights[self.sample2_inds]
+            n2 = n1  # np.sum(weights2) / vol
+
+            return p_ncic, n1, n2
         else:
             return p_ncic
 

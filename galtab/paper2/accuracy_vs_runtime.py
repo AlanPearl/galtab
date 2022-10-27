@@ -71,11 +71,11 @@ class AccuracyRuntimeTester:
 
     def run_gt_trials(self):
         gt_results = []
-        num_trials = 10
+        num_trials = 200
         simnames = ["bolplanck"]
-        min_quants = [0.001, 0.0001]
-        max_quants = 1 - np.logspace(-1, -7, 14)
-        n_mcs = [1, 2, 3, 4, 5]
+        min_quants = [0.1, 0.001, 0.00001]
+        max_quants = [0.9, 0.999, 0.99999]
+        n_mcs = [1, 3, 5, 10, 20]
 
         for simname in tqdm(simnames):
             for min_quant in tqdm(min_quants, leave=None):
@@ -133,6 +133,11 @@ if __name__ == "__main__":
         past_gt_results, past_ht_results = None, None
 
     tester = AccuracyRuntimeTester()
+    # Always run the galtab trials
     tester.run_gt_trials()
-    tester.ht_results = past_ht_results  # tester.run_ht_trials()
+    if past_ht_results is None:
+        # Don't rerun halotools trials if they've already been run
+        tester.run_ht_trials()
+    else:
+        tester.ht_results = past_ht_results
     tester.save(output)
