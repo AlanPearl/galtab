@@ -71,10 +71,11 @@ class AccuracyRuntimeTester:
 
     def run_gt_trials(self):
         gt_results = []
-        num_trials = 200
+        num_trials = 50
         simnames = ["bolplanck"]
         min_quants = [0.1, 0.001, 0.00001]
-        max_quants = [0.9, 0.999, 0.99999]
+        # max_quants = [0.9, 0.999, 0.99999]
+        max_quants = 1 - np.logspace(-1, -8, 20)
         n_mcs = [1, 3, 5, 10, 20]
 
         for simname in tqdm(simnames):

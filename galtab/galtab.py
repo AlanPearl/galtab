@@ -160,11 +160,15 @@ class CICTabulator:
         self.n2 = len(self.sample2)
         self.n_mc = galtabulator.n_mc
 
-        self.mc_rands = self.rs.random((self.n, self.n_mc))
+        self.mc_rands = self.seed_monte_carlo()
         self.indices = None
 
         self.tabulate(proj_search_radius=proj_search_radius,
                       cylinder_half_length=cylinder_half_length, **kwargs)
+
+    def seed_monte_carlo(self):
+        self.mc_rands = self.rs.random((self.n, self.n_mc))
+        return self.mc_rands
 
     def tabulate(self, **kwargs):
         if "sample1" in kwargs:
@@ -188,9 +192,11 @@ class CICTabulator:
         # TODO: Do this in a way that doesn't break if sample1 != sample2
         self.indices = self.indices[self.indices["i1"] != self.indices["i2"]]
 
-    def predict(self, model, return_number_densities=False, n_mc=None):
+    def predict(self, model, return_number_densities=False, n_mc=None,
+                reseed_mc=False):
         cic = self.calc_cic(
-            model, return_number_densities=return_number_densities, n_mc=n_mc)
+            model, return_number_densities=return_number_densities,
+            n_mc=n_mc, reseed_mc=reseed_mc)
         n1 = n2 = None
         if return_number_densities:
             cic, n1, n2 = cic
@@ -207,7 +213,10 @@ class CICTabulator:
         else:
             return cic
 
-    def calc_cic(self, model, return_number_densities=False, n_mc=None):
+    def calc_cic(self, model, return_number_densities=False, n_mc=None,
+                 reseed_mc=False):
+        if reseed_mc:
+            self.seed_monte_carlo()
         if n_mc is None:
             n_mc = self.n_mc
             mc_rands = self.mc_rands

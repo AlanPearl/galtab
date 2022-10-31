@@ -3,8 +3,10 @@ import scipy.stats
 import argparse
 import pathlib
 
+from astropy.cosmology import Cosmology
 import halotools.empirical_models as htem
 import halotools.sim_manager as htsm
+import halotools.sim_manager.sim_defaults
 import halotools.mock_observables as htmo
 import tabcorr
 import nautilus
@@ -35,6 +37,9 @@ class ParamSampler:
         self.fiducial_params = None
         self.halocat = kwargs.get("halocat")
         self.obs = self.load_obs()
+        self.cosmo = self.obs["cosmo"].tolist()
+        if not isinstance(self.cosmo, Cosmology):
+            self.cosmo = Cosmology.from_format(self.cosmo, format="mapping")
         self.proj_search_radius = self.obs["proj_search_radius"].tolist()
         self.cylinder_half_length = self.obs["cylinder_half_length"].tolist()
         self.pimax = self.obs["pimax"].tolist()
@@ -69,8 +74,10 @@ class ParamSampler:
         """
         verbose = self.verbose if verbose is None else verbose
         self.sampler.run(verbose=verbose)
-        self.parameter_samples, self.log_weights, \
-            self.log_likelihoods = sampler.posterior()
+
+        # TODO: Why doesn't this work?
+        # self.parameter_samples, self.log_weights, \
+        #     self.log_likelihoods = sampler.posterior()
         return self.parameter_samples
 
     def save(self, filename):
@@ -131,7 +138,7 @@ class ParamSampler:
             self.halocat = htsm.CachedHaloCatalog(
                 simname=self.simname, redshift=self.redshift,
                 version_name=self.version_name)
-            self.halocat.cosmology = self.obs["cosmo"].tolist()
+            self.halocat.cosmology = self.cosmo
         # model.populate_mock(halocat)
 
     def make_wptab(self):
@@ -232,6 +239,8 @@ class ParamSampler:
         else:
             cic = galtab.moments.moments_from_samples(
                 counts, np.arange(self.kmax) + 1)
+            assert np.isclose(cic[0], np.mean(counts)), \
+                f"{cic[0]} != {np.mean(counts)}"
 
         if return_number_density:
             return cic, len(xyz) / np.product(self.halocat.Lbox)
@@ -247,7 +256,7 @@ class ParamSampler:
         gal = model.mock.galaxy_table
         xyz = htmo.return_xyz_formatted_array(
             gal["x"], gal["y"], gal["z"], period=self.halocat.Lbox,
-            cosmology=self.halocat.cosmology, redshift=self.redshift,
+            cosmology=self.cosmo, redshift=self.redshift,
             velocity=gal["vz"], velocity_distortion_dimension="z")
         return xyz
 

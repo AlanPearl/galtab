@@ -438,5 +438,5 @@ if __name__ == "__main__":
         zmax=calc.zmax,
         passive_evolved_mags=calc.passive_evolved_mags,
         kuan_mags=calc.kuan_mags,
-        cosmo=calc.cosmo
+        cosmo=calc.cosmo.to_format("mapping")
     )

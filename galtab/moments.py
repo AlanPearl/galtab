@@ -7,8 +7,8 @@ def moments_from_samples(samples, k_vals, weights=None):
     kmax = np.max(k_vals)
     weights = np.ones_like(samples) if weights is None else weights
     weights = np.array(weights) / np.sum(weights)
-    mu1 = np.sum(samples * weights) if kmax > 0 else 0
-    mu2 = (np.sum(weights * (samples - mu1)**2)) ** 0.5 if kmax > 1 else 0
+    mu1 = np.sum(samples * weights) if kmax > 0 else np.nan
+    mu2 = (np.sum(weights * (samples - mu1)**2)) ** 0.5 if kmax > 1 else np.nan
 
     moments = []
     for k in k_vals:
