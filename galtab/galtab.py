@@ -65,9 +65,17 @@ class GalaxyTabulator:
         self.predictor = None
         self.weights = None
 
-        fiducial_model.populate_mock(
-            halocat, seed=seed,
-            Num_ptcl_requirement=self.num_ptcl_requirement)
+        if (hasattr(fiducial_model, "mock")
+                and fiducial_model.mock.Num_ptcl_requirement
+                == self.num_ptcl_requirement
+                and fiducial_model.mock.redshift == halocat.redshift
+                and fiducial_model.mock.simname == halocat.simname
+                and fiducial_model.mock.version_name == halocat.version_name):
+            pass
+        else:
+            fiducial_model.populate_mock(
+                halocat, seed=seed,
+                Num_ptcl_requirement=self.num_ptcl_requirement)
 
         self.halo_table = fiducial_model.mock.halo_table
         self.galaxies, self._placeholder_model = self.populate_placeholders()
@@ -112,8 +120,9 @@ class GalaxyTabulator:
 class CICTabulator:
     def __init__(self, galtabulator, proj_search_radius,
                  cylinder_half_length, k_vals=None, bin_edges=None,
-                 sample1_selector=None, sample2_selector=None, seed=None,
-                 max_ncic=int(1e5), **kwargs):
+                 sample1_selector=None, sample2_selector=None,
+                 analytic_moments=False, max_ncic=int(1e5),
+                 seed=None, **kwargs):
         """
         Initialize a CICTabulator
 
@@ -130,19 +139,23 @@ class CICTabulator:
         bin_edges : Optional[np.ndarray]
         sample1_selector : Optional[callable]
         sample2_selector : Optional[callable]
+        analytic_moments : Optional[bool]
         max_ncic : Optional[int]
         seed : Optional[int]
 
         Note: Remaining keyword arguments are passed to halotools' counts-in-
         cylinders function.
         """
-        assert sample1_selector is None, "Parameter not implemented yet"
-        assert sample2_selector is None, "Parameter not implemented yet"
+        assert sample1_selector is None, "Parameter not implemented"
+        assert sample2_selector is None, "Parameter not implemented"
         self.galtabulator = galtabulator
-        self.k_vals = k_vals
+        self.k_vals = np.array(k_vals, dtype=int)
+        assert np.all(self.k_vals == k_vals), "k_vals must be a list of ints"
+        self.kmax = np.max(k_vals)
         self.bin_edges = bin_edges
         self.sample1_selector = sample1_selector
         self.sample2_selector = sample2_selector
+        self.analytic_moments = analytic_moments
         self.max_ncic = max_ncic
         self.rs = np.random.RandomState(seed)
 
@@ -201,7 +214,9 @@ class CICTabulator:
         if return_number_densities:
             cic, n1, n2 = cic
 
-        if self.k_vals is not None:
+        if self.analytic_moments and self.k_vals is None:
+            pass
+        elif self.k_vals is not None:
             cic = moments.moments_from_samples(
                 np.arange(len(cic)), self.k_vals, weights=cic)
         elif self.bin_edges is not None:
@@ -214,7 +229,7 @@ class CICTabulator:
             return cic
 
     def calc_cic(self, model, return_number_densities=False, n_mc=None,
-                 reseed_mc=False):
+                 reseed_mc=False, warn_p_over_1=True):
         if reseed_mc:
             self.seed_monte_carlo()
         if n_mc is None:
@@ -225,28 +240,52 @@ class CICTabulator:
         n1 = self.n1
         indices = self.indices
         weights = self.galtabulator.calc_weights(model)
-        previous_ints = weights.astype(int)
-        next_int_probs = weights % 1
+        previous_ints = np.ceil(weights).astype(int) - 1
+        previous_ints[previous_ints < 0] = 0
+        next_int_probs = weights - previous_ints
+        if self.analytic_moments and self.kmax is not None:
+            if warn_p_over_1 and np.any(previous_ints):
+                bad_weights = weights[previous_ints != 0]
+                print(f"WARNING: There are {len(bad_weights)} placeholders "
+                      f"with weight>1, averaging: {bad_weights.mean()}")
+            pb_cumulants = []
+            for k in range(1, self.kmax + 1):
+                # Bernoulli cumulant
+                p = weights if k == 1 else next_int_probs
+                bc = moments.bernoulli_cumulant(p, k)
 
-        mc_num_arrays = previous_ints[:, None] + (mc_rands <
-                                                  next_int_probs[:, None])
+                # Sum of Bernoulli cumulants --> Poisson Binomial cumulants
+                pc = np.zeros(n1, dtype=float)
+                np.add.at(pc, indices["i1"], bc[indices["i2"]])
+                pb_cumulants.append(pc)
 
-        ncic_arrays = np.zeros((n1, n_mc), dtype=int)
-        np.add.at(ncic_arrays, indices["i1"],
-                  mc_num_arrays[indices["i2"]])
-        # mc_num_arrays[self.sample2_inds][indices["i2"]])
+            pb_raw_moments = moments.raw_moments_from_cumulants(pb_cumulants)
+            avg_raw_moments = np.average(
+                pb_raw_moments, weights=weights, axis=1)
+            cic = moments.standardized_moments_from_raw_moments(
+                avg_raw_moments)
+            cic = np.array([cic[k-1] if k > 0 else 1 for k in self.k_vals])
 
-        numbins = np.max(ncic_arrays) + 1
-        if numbins < self.max_ncic:
-            ncic_arrays1 = ncic_arrays + (numbins * np.arange(n_mc))
-
-            ncic_hists = np.bincount(
-                ncic_arrays1.ravel(), weights=mc_num_arrays.ravel(),
-                minlength=numbins * n_mc).reshape(n_mc, -1)
-            p_ncic_configs = ncic_hists / np.sum(mc_num_arrays, axis=0)[:, None]
-            p_ncic = np.nanmean(p_ncic_configs, axis=0)
         else:
-            p_ncic = np.array([np.nan])
+            mc_num_arrays = previous_ints[:, None] + (mc_rands <
+                                                      next_int_probs[:, None])
+
+            ncic_arrays = np.zeros((n1, n_mc), dtype=int)
+            np.add.at(ncic_arrays, indices["i1"],
+                      mc_num_arrays[indices["i2"]])
+            # mc_num_arrays[self.sample2_inds][indices["i2"]])
+
+            numbins = np.max(ncic_arrays) + 1
+            if numbins < self.max_ncic:
+                ncic_arrays1 = ncic_arrays + (numbins * np.arange(n_mc))
+
+                ncic_hists = np.bincount(
+                    ncic_arrays1.ravel(), weights=mc_num_arrays.ravel(),
+                    minlength=numbins * n_mc).reshape(n_mc, -1)
+                p_ncic_configs = ncic_hists / np.sum(mc_num_arrays, axis=0)[:, None]
+                cic = np.nanmean(p_ncic_configs, axis=0)
+            else:
+                cic = np.array([np.nan])
 
         if return_number_densities:
             vol = np.product(self.galtabulator.halocat.Lbox)
@@ -255,9 +294,9 @@ class CICTabulator:
             # weights2 = weights[self.sample2_inds]
             n2 = n1  # np.sum(weights2) / vol
 
-            return p_ncic, n1, n2
+            return cic, n1, n2
         else:
-            return p_ncic
+            return cic
 
     def save(self, filename):
         np.save(filename, np.array([self], dtype=object))
