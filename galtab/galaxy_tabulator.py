@@ -1,7 +1,8 @@
 import types
 from copy import copy
+
 import numpy as np
-import scipy.stats
+# import scipy.stats
 
 import halotools.mock_observables as htmo
 
@@ -11,7 +12,8 @@ def placeholder_occupation(self, **kwargs):
     mean_occ = self.mean_occupation(**kwargs)
 
     if self._upper_occupation_bound > 1:
-        occupation = scipy.stats.poisson.ppf(self.max_quant, mu=mean_occ).astype(int)
+        # occupation = scipy.stats.poisson.ppf(self.max_quant, mu=mean_occ).astype(int)
+        occupation = np.ceil(mean_occ / self.max_weight).astype(int)
     else:
         occupation = np.where(mean_occ >= self.min_prob, 1, 0)
 
@@ -24,7 +26,7 @@ def make_placeholder_model(galtab):
     model = galtab.fiducial_model
     ph_model = copy(model)
     min_quant = galtab.min_quant
-    max_quant = galtab.max_quant
+    max_weight = galtab.max_weight
 
     # Access the occupation component models
     occupation_model_names = [x for x in ph_model._input_model_dictionary
@@ -43,7 +45,7 @@ def make_placeholder_model(galtab):
             assert method_name in model._mock_generation_calling_sequence
 
             occ_model.min_prob = get_min_prob(galtab, occ_model, min_quant)
-            occ_model.max_quant = max_quant
+            occ_model.max_weight = max_weight
             occ_model.mc_occupation = types.MethodType(
                 placeholder_occupation, occ_model)
             setattr(ph_model, method_name, occ_model.mc_occupation)

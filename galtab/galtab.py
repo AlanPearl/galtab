@@ -18,7 +18,7 @@ class GalaxyTabulator:
     """
 
     def __init__(self, halocat, fiducial_model, n_mc=10,
-                 min_quant=0.001, max_quant=0.9999, sample_fraction=1.0,
+                 min_quant=0.001, max_weight=0.01, sample_fraction=1.0,
                  num_ptcl_requirement=None,
                  seed=None, cosmo=None):
         """
@@ -33,7 +33,7 @@ class GalaxyTabulator:
         min_quant : float (default = 0.001)
             The minimum quantile of galaxies as a function of the model's
             prim_haloprop to populate at least one placeholder in such a halo
-        max_quant : float (default = 0.9999)
+        max_weight : float (default = 0.01)
             The quantile of the Poisson distribution centered around <N_sat>
             to use as the number of satellite placeholders per halo
         sample_fraction : float (default = 1.0)
@@ -54,7 +54,7 @@ class GalaxyTabulator:
         self.fiducial_model = fiducial_model
         self.n_mc = n_mc
         self.min_quant = min_quant
-        self.max_quant = max_quant
+        self.max_weight = max_weight
         self.sample_fraction = sample_fraction
         if num_ptcl_requirement is None:
             self.num_ptcl_requirement = htsm.sim_defaults.Num_ptcl_requirement
