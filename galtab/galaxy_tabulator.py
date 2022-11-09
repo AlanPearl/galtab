@@ -92,22 +92,39 @@ def calc_weights(halos, galaxies, halo_inds, model):
     return weights
 
 
-def get_min_prob(galtab, occ_model, min_quantile):
-    haloprop = galtab.halo_table[occ_model.prim_haloprop_key]
-    prop_bins = np.geomspace(haloprop.min(), haloprop.max(), 100)
-    prop_hist = np.histogram(haloprop, prop_bins)[0]
-    prop_cens = np.sqrt(prop_bins[:-1] * prop_bins[1:])
+# Old version made a histogram of centrals as function of prim_haloprop
+# The current version makes the histogram as function of mean_occupation
+# ======================================================================
+# def get_min_prob(galtab, occ_model, min_quantile):
+#     haloprop = galtab.halo_table[occ_model.prim_haloprop_key]
+#     prop_bins = np.geomspace(haloprop.min(), haloprop.max(), 100)
+#     prop_hist = np.histogram(haloprop, prop_bins)[0]
+#     prop_cens = np.sqrt(prop_bins[:-1] * prop_bins[1:])
+#
+#     meanocc = np.mean(
+#         [occ_model.mean_occupation(prim_haloprop=prop_cens, sec_haloprop_percentile=0),
+#          occ_model.mean_occupation(prim_haloprop=prop_cens, sec_haloprop_percentile=1)],
+#         axis=0)
+#     gal_hist = meanocc * prop_hist
+#     gal_cumsum = np.cumsum(gal_hist)
+#     gal_cdf = np.concatenate([[0.0], gal_cumsum / gal_cumsum[-1]])
+#
+#     min_prop = np.interp(min_quantile, gal_cdf, prop_bins)
+#     min_prob = np.mean(
+#         [occ_model.mean_occupation(prim_haloprop=min_prop, sec_haloprop_percentile=0),
+#          occ_model.mean_occupation(prim_haloprop=min_prop, sec_haloprop_percentile=1)])
+#     return min_prob
 
-    meanocc = np.mean(
-        [occ_model.mean_occupation(prim_haloprop=prop_cens, sec_haloprop_percentile=0),
-         occ_model.mean_occupation(prim_haloprop=prop_cens, sec_haloprop_percentile=1)],
-        axis=0)
-    gal_hist = meanocc * prop_hist
-    gal_cumsum = np.cumsum(gal_hist)
-    gal_cdf = np.concatenate([[0], gal_cumsum / gal_cumsum[-1]])
 
-    min_prop = np.interp(min_quantile, gal_cdf, prop_bins)
-    min_prob = np.mean(
-        [occ_model.mean_occupation(prim_haloprop=min_prop, sec_haloprop_percentile=0),
-         occ_model.mean_occupation(prim_haloprop=min_prop, sec_haloprop_percentile=1)])
-    return min_prob
+def get_min_prob(galtab, occ_model, min_quantile, numbins=1000):
+    meanocc = occ_model.mean_occupation(table=galtab.halo_table)
+    occ_bins = np.geomspace(meanocc[meanocc > 0].min(), 1.0, numbins)
+    occ_bins = np.concatenate([[0.0], occ_bins])
+    occ_hist = np.histogram(meanocc, occ_bins)[0]
+    occ_cens = (occ_bins[:-1] + occ_bins[1:]) / 2
+
+    gal_cumsum = np.cumsum(occ_cens * occ_hist)
+    gal_cdf = np.concatenate([[0.0], gal_cumsum / gal_cumsum[-1]])
+
+    min_meanocc = np.interp(min_quantile, gal_cdf, occ_bins)
+    return min_meanocc  # mean occupation of central = prob of central
