@@ -19,8 +19,8 @@ class GalaxyTabulator:
 
     def __init__(self, halocat, fiducial_model, n_mc=10,
                  min_quant=0.001, max_weight=0.01, sample_fraction=1.0,
-                 num_ptcl_requirement=None,
-                 seed=None, cosmo=None):
+                 num_ptcl_requirement=None, seed=None, cosmo=None,
+                 sat_quant_instead_of_max_weight=False):
         """
         Parameters
         ----------
@@ -43,8 +43,12 @@ class GalaxyTabulator:
             Passed to the initial call of model.populate_mock()
         seed : Optional[int]
             Monte-Carlo realization seeds; also passed to model.populate_mock()
-        cosmo : astropy.Cosmology object
+        cosmo : Optional[astropy.Cosmology object]
             Used for redshift-space distortions; default is Bolshoi-Planck
+        sat_quant_instead_of_max_weight : Optional[bool]
+            If true, max_weight is interpretted as 1 - sat_quant, where
+            sat_quant specifies the number of placeholder satellites by the
+            quantile of the (Poisson) occupation distribution of each halo
 
         Examples
         --------
@@ -56,6 +60,7 @@ class GalaxyTabulator:
         self.min_quant = min_quant
         self.max_weight = max_weight
         self.sample_fraction = sample_fraction
+        self.sat_quant_instead_of_max_weight = sat_quant_instead_of_max_weight
         if num_ptcl_requirement is None:
             self.num_ptcl_requirement = htsm.sim_defaults.Num_ptcl_requirement
         else:

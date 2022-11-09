@@ -2,7 +2,7 @@ import types
 from copy import copy
 
 import numpy as np
-# import scipy.stats
+import scipy.stats
 
 import halotools.mock_observables as htmo
 
@@ -12,8 +12,10 @@ def placeholder_occupation(self, **kwargs):
     mean_occ = self.mean_occupation(**kwargs)
 
     if self._upper_occupation_bound > 1:
-        # occupation = scipy.stats.poisson.ppf(self.max_quant, mu=mean_occ).astype(int)
-        occupation = np.ceil(mean_occ / self.max_weight).astype(int)
+        if self.sat_quant_instead_of_max_weight:
+            occupation = scipy.stats.poisson.ppf(1 - self.max_weight, mu=mean_occ).astype(int)
+        else:
+            occupation = np.ceil(mean_occ / self.max_weight).astype(int)
     else:
         occupation = np.where(mean_occ >= self.min_prob, 1, 0)
 
@@ -46,6 +48,8 @@ def make_placeholder_model(galtab):
 
             occ_model.min_prob = get_min_prob(galtab, occ_model, min_quant)
             occ_model.max_weight = max_weight
+            occ_model.sat_quant_instead_of_max_weight = \
+                galtab.sat_quant_instead_of_max_weight
             occ_model.mc_occupation = types.MethodType(
                 placeholder_occupation, occ_model)
             setattr(ph_model, method_name, occ_model.mc_occupation)
