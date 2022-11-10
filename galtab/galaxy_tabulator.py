@@ -60,7 +60,25 @@ def make_placeholder_model(galtab):
         if galtab.seed is not None:
             kwargs["seed"] = galtab.seed
         ph_model.populate_mock(galtab.halocat, **kwargs)
+
+        # Get rid of useless halos (no placeholders populated)
+        # ====================================================
+        trimmed_halocat = copy(galtab.halocat)
+        trimmed_halotable = ph_model.mock.halo_table
+        useless_conditions = []
+        for name in trimmed_halotable.keys():
+            if not name.startswith("halo_num_"):
+                continue
+            useless_conditions.append(trimmed_halotable[name] < 1)
+        useless_halos = np.all(useless_conditions, axis=0)
+        trimmed_halotable = trimmed_halotable[~useless_halos]
+
+        # Repopulate the mock, this time without the useless halos
+        # ========================================================
+        trimmed_halocat._halo_table = trimmed_halotable
+        ph_model.populate_mock(trimmed_halocat, **kwargs)
         galaxies = ph_model.mock.galaxy_table
+
     finally:
         # Placeholders have been populated, so now we can
         # return the model to its original state

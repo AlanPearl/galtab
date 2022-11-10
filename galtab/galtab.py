@@ -85,9 +85,6 @@ class GalaxyTabulator:
         self.halo_table = fiducial_model.mock.halo_table
         self.galaxies, self._placeholder_model = self.populate_placeholders()
         self.halo_table = self._placeholder_model.mock.halo_table
-        useless_halos = ((self.halo_table["halo_num_satellites"] < 1) &
-                         (self.halo_table["halo_num_centrals"] < 1))
-        self.halo_table = self.halo_table[~useless_halos]
         self.halo_inds = self.tabulate_halo_inds()
 
         # Unassign the halotools models to preserve pickle-ability :(
@@ -101,7 +98,7 @@ class GalaxyTabulator:
         self.weights = gt.calc_weights(
             self.halo_table, self.galaxies, self.halo_inds,
             model)
-        # TODO: More efficient if I had just thrown out (1 - sample_fraction)
+        # TODO: Could be more efficient to just throw out a fraction
         # TODO: of the tabulated galaxy sample at the start
         return self.weights * self.sample_fraction
 
