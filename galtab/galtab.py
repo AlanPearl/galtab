@@ -71,21 +71,13 @@ class GalaxyTabulator:
         self.predictor = None
         self.weights = None
 
-        # if (hasattr(fiducial_model, "mock")
-        #         and fiducial_model.mock.Num_ptcl_requirement
-        #         == self.num_ptcl_requirement
-        #         and fiducial_model.mock.redshift == halocat.redshift
-        #         and fiducial_model.mock.simname == halocat.simname
-        #         and fiducial_model.mock.version_name == halocat.version_name
-        #         and len(fiducial_model.mock.halo_table)
-        #         == len(halocat.halo_table)):
-        #     pass
-        # else:
+        # This is basically my lazy, but fool-proof way of making
+        # sure the halo_table doesn't include satellite halos
         fiducial_model.populate_mock(
             halocat, seed=seed,
             Num_ptcl_requirement=self.num_ptcl_requirement)
-
         self.halo_table = fiducial_model.mock.halo_table
+
         self.galaxies, self._placeholder_model = self.populate_placeholders()
         self.halo_table = self._placeholder_model.mock.halo_table
         self.halo_inds = self.tabulate_halo_inds()
@@ -219,7 +211,7 @@ class CICTabulator:
         if return_number_densities:
             cic, n1, n2 = cic
 
-        if self.analytic_moments and self.k_vals is None:
+        if self.analytic_moments and self.k_vals is not None:
             pass
         elif self.k_vals is not None:
             cic = moments.moments_from_samples(
