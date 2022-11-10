@@ -1,3 +1,4 @@
+from copy import copy
 import numpy as np
 import pandas as pd
 
@@ -55,7 +56,7 @@ class GalaxyTabulator:
         TODO: Add example usage of galtab
         """
         self.halocat = halocat
-        self.fiducial_model = fiducial_model
+        self.fiducial_model = copy(fiducial_model)
         self.n_mc = n_mc
         self.min_quant = min_quant
         self.max_weight = max_weight
@@ -70,17 +71,19 @@ class GalaxyTabulator:
         self.predictor = None
         self.weights = None
 
-        if (hasattr(fiducial_model, "mock")
-                and fiducial_model.mock.Num_ptcl_requirement
-                == self.num_ptcl_requirement
-                and fiducial_model.mock.redshift == halocat.redshift
-                and fiducial_model.mock.simname == halocat.simname
-                and fiducial_model.mock.version_name == halocat.version_name):
-            pass
-        else:
-            fiducial_model.populate_mock(
-                halocat, seed=seed,
-                Num_ptcl_requirement=self.num_ptcl_requirement)
+        # if (hasattr(fiducial_model, "mock")
+        #         and fiducial_model.mock.Num_ptcl_requirement
+        #         == self.num_ptcl_requirement
+        #         and fiducial_model.mock.redshift == halocat.redshift
+        #         and fiducial_model.mock.simname == halocat.simname
+        #         and fiducial_model.mock.version_name == halocat.version_name
+        #         and len(fiducial_model.mock.halo_table)
+        #         == len(halocat.halo_table)):
+        #     pass
+        # else:
+        fiducial_model.populate_mock(
+            halocat, seed=seed,
+            Num_ptcl_requirement=self.num_ptcl_requirement)
 
         self.halo_table = fiducial_model.mock.halo_table
         self.galaxies, self._placeholder_model = self.populate_placeholders()
