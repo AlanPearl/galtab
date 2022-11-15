@@ -19,7 +19,7 @@ class GalaxyTabulator:
     """
 
     def __init__(self, halocat, fiducial_model, n_mc=10,
-                 min_quant=0.001, max_weight=0.01, sample_fraction=1.0,
+                 min_quant=1e-4, max_weight=0.05, sample_fraction=1.0,
                  num_ptcl_requirement=None, seed=None, cosmo=None,
                  sat_quant_instead_of_max_weight=False):
         """
@@ -55,7 +55,7 @@ class GalaxyTabulator:
         --------
         TODO: Add example usage of galtab
         """
-        self.halocat = halocat
+        self.halocat = copy(halocat)
         self.fiducial_model = copy(fiducial_model)
         self.n_mc = n_mc
         self.min_quant = min_quant
@@ -71,14 +71,15 @@ class GalaxyTabulator:
         self.predictor = None
         self.weights = None
 
-        # This is basically my lazy, but fool-proof way of making
+        # Populate_mock is my lazy, but fool-proof way of making
         # sure the halo_table doesn't include satellite halos
         fiducial_model.populate_mock(
             halocat, seed=seed,
             Num_ptcl_requirement=self.num_ptcl_requirement)
         self.halo_table = fiducial_model.mock.halo_table
 
-        self.galaxies, self._placeholder_model = self.populate_placeholders()
+        self.galaxies, self._placeholder_model, self.halocat = \
+            self.populate_placeholders()
         self.halo_table = self._placeholder_model.mock.halo_table
         self.halo_inds = self.tabulate_halo_inds()
 
@@ -118,7 +119,8 @@ class CICTabulator:
     def __init__(self, galtabulator, proj_search_radius,
                  cylinder_half_length, k_vals=None, bin_edges=None,
                  sample1_selector=None, sample2_selector=None,
-                 analytic_moments=False, max_ncic=int(1e5),
+                 analytic_moments=False, sort_tabulated_indices=False,
+                 max_ncic=int(1e5),
                  seed=None, **kwargs):
         """
         Initialize a CICTabulator
@@ -130,15 +132,30 @@ class CICTabulator:
         Parameters
         ----------
         galtabulator : GalaxyTabulator
+            Object containing the tabulated placeholder galaxies
         proj_search_radius : float
+            Perpendicular radius of circle in which to count pairs
         cylinder_half_length : float
+            Half length of cylinder in which to count pairs
         k_vals : Optional[np.ndarray]
+            Array of moment numbers (i.e. [1, 2] for mean, std)
         bin_edges : Optional[np.ndarray]
+            Bin edges of P(Ncic); ignored if k_vals are provided
         sample1_selector : Optional[callable]
+            Not implemented
         sample2_selector : Optional[callable]
+            Not implemented
         analytic_moments : Optional[bool]
+            Less noisy than Monte-Carlo approximation and quicker
+            if only calculating a few k_vals
+        sort_tabulated_indices : Optional[bool]
+            This will cause longer tabulation time, but shorter
+            subsequent prediction calls
         max_ncic : Optional[int]
+            If any galaxies have more Ncic than this, return Ncic=0
         seed : Optional[int]
+            Random seed to produce reproducible results, even if
+            not using analytic_moments=True
 
         Note: Remaining keyword arguments are passed to halotools' counts-in-
         cylinders function.
@@ -153,6 +170,7 @@ class CICTabulator:
         self.sample1_selector = sample1_selector
         self.sample2_selector = sample2_selector
         self.analytic_moments = analytic_moments
+        self.sort_tabulated_indices = sort_tabulated_indices
         self.max_ncic = max_ncic
         self.rs = np.random.RandomState(seed)
 
@@ -201,12 +219,14 @@ class CICTabulator:
         # Remove self-counting!
         # TODO: Do this in a way that doesn't break if sample1 != sample2
         self.indices = self.indices[self.indices["i1"] != self.indices["i2"]]
+        if self.sort_tabulated_indices:
+            self.indices.sort(order="i1")
 
     def predict(self, model, return_number_densities=False, n_mc=None,
-                reseed_mc=False):
+                reseed_mc=False, warn_p_over_1=True):
         cic = self.calc_cic(
             model, return_number_densities=return_number_densities,
-            n_mc=n_mc, reseed_mc=reseed_mc)
+            n_mc=n_mc, reseed_mc=reseed_mc, warn_p_over_1=warn_p_over_1)
         n1 = n2 = None
         if return_number_densities:
             cic, n1, n2 = cic
@@ -241,6 +261,7 @@ class CICTabulator:
         previous_ints[previous_ints < 0] = 0
         next_int_probs = weights - previous_ints
         if self.analytic_moments and self.kmax is not None:
+            # Still spending ~99% of computational time in np.add.at
             if warn_p_over_1 and np.any(previous_ints):
                 bad_weights = weights[previous_ints != 0]
                 print(f"WARNING: There are {len(bad_weights)} placeholders "
@@ -301,6 +322,7 @@ class CICTabulator:
     @classmethod
     def load(cls, filename):
         obj = np.load(filename, allow_pickle=True)[0]
+        assert isinstance(obj, cls)
         return obj
 
 

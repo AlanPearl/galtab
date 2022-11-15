@@ -13,11 +13,13 @@ def placeholder_occupation(self, **kwargs):
 
     if self._upper_occupation_bound > 1:
         if self.sat_quant_instead_of_max_weight:
-            occupation = scipy.stats.poisson.ppf(1 - self.max_weight, mu=mean_occ).astype(int)
+            assert self.max_weight >= 6e-17, \
+                "sat_quant too low for scipy.stats.poisson.isf"
+            occupation = scipy.stats.poisson.isf(self.max_weight, mu=mean_occ).astype(int)
         else:
             occupation = np.ceil(mean_occ / self.max_weight).astype(int)
     else:
-        occupation = np.where(mean_occ >= self.min_prob, 1, 0)
+        occupation = np.where((mean_occ >= self.min_prob), 1, 0)
 
     return occupation
 
@@ -93,18 +95,18 @@ def make_placeholder_model(galtab):
         velocity=galaxies["vz"])
     galaxies.add_columns(obs_xyz.T, names=[f"obs_{x}" for x in "xyz"])
 
-    return galaxies, ph_model
+    return galaxies, ph_model, trimmed_halocat
 
 
 # noinspection PyProtectedMember
 def calc_weights(halos, galaxies, halo_inds, model):
     # TODO: Speed this up with num_ptcl_requirement???
-    weights = np.empty_like(galaxies["x"])
+    weights = np.full_like(galaxies["x"].value, np.nan)
 
     # Access the occupation component models
     names = [x for x in model._input_model_dictionary
              if x.endswith("_occupation")]
-    gal_types = [x.replace("_occupation", "") for x in names]
+    gal_types = [x[:-11] for x in names]
     methods = [getattr(model, "mean_occupation_" + x) for x in gal_types]
 
     for gal_type, method in zip(gal_types, methods):
