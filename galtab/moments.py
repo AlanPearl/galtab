@@ -1,7 +1,21 @@
 # Functions which calculate the "standardized" moments.
 # For simplicity, I'm not going to try implementing unbiased estimators
 import math
+from functools import partial
+
 import numpy as np
+import jax
+from jax import numpy as jnp
+
+
+@partial(jax.jit, static_argnums=(3, 4))
+def jit_sum_at(arr_in, ind_in, ind_out, len_out=None, ind_out_is_sorted=False):
+    if len_out is None:
+        len_out = len(arr_in)
+    arr_out = jnp.zeros(len_out, dtype=arr_in.dtype)
+    arr_out = arr_out.at[ind_out].add(
+        arr_in[ind_in], indices_are_sorted=ind_out_is_sorted)
+    return arr_out
 
 
 def moments_from_samples(samples, k_vals, weights=None):

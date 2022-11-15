@@ -6,6 +6,7 @@ import pandas as pd
 # import halotools.empirical_models as htem
 import halotools.mock_observables as htmo
 import halotools.sim_manager as htsm
+import halotools.sim_manager.sim_defaults
 
 from . import galaxy_tabulator as gt
 from . import moments
@@ -67,7 +68,13 @@ class GalaxyTabulator:
         else:
             self.num_ptcl_requirement = num_ptcl_requirement
         self.seed = seed
-        self.cosmo = halocat.cosmology if cosmo is None else cosmo
+        self.cosmo = cosmo
+        if cosmo is None:
+            if hasattr(halocat, "cosmology"):
+                self.cosmo = halocat.cosmology if hasattr(halocat, "cosmology") else None
+            else:
+                raise ValueError("No cosmology specified")
+        self.cosmo = halocat.cosmology if cosmo is None and hasattr(halocat, "cosmology") else cosmo
         self.predictor = None
         self.weights = None
 
@@ -261,7 +268,8 @@ class CICTabulator:
         previous_ints[previous_ints < 0] = 0
         next_int_probs = weights - previous_ints
         if self.analytic_moments and self.kmax is not None:
-            # Still spending ~99% of computational time in np.add.at
+            # It was spending ~99% of computational time in np.add.at
+            # before replacing np.add.at with jax at[].add()
             if warn_p_over_1 and np.any(previous_ints):
                 bad_weights = weights[previous_ints != 0]
                 print(f"WARNING: There are {len(bad_weights)} placeholders "
@@ -273,9 +281,11 @@ class CICTabulator:
                 bc = moments.bernoulli_cumulant(p, k)
 
                 # Sum of Bernoulli cumulants --> Poisson Binomial cumulants
-                pc = np.zeros(n1, dtype=float)
-                np.add.at(pc, indices["i1"], bc[indices["i2"]])
-                pb_cumulants.append(pc)
+                pc = moments.jit_sum_at(
+                    bc, indices["i2"], indices["i1"], len_out=n1,
+                    ind_out_is_sorted=self.sort_tabulated_indices)
+                # replace bc with bc[self.sample2_inds] ?
+                pb_cumulants.append(np.asarray(pc))
 
             pb_raw_moments = moments.raw_moments_from_cumulants(pb_cumulants)
             avg_raw_moments = np.average(
@@ -288,10 +298,11 @@ class CICTabulator:
             mc_num_arrays = previous_ints[:, None] + (mc_rands <
                                                       next_int_probs[:, None])
 
-            ncic_arrays = np.zeros((n1, n_mc), dtype=int)
-            np.add.at(ncic_arrays, indices["i1"],
-                      mc_num_arrays[indices["i2"]])
-            # mc_num_arrays[self.sample2_inds][indices["i2"]])
+            ncic_arrays = moments.jit_sum_at(
+                mc_num_arrays, indices["i2"], indices["i2"],
+                len_out=(n1, n_mc),
+                ind_out_is_sorted=self.sort_tabulated_indices)
+            # replace mc_num_arrays with mc_num_arrays[self.sample2_inds] ?
 
             numbins = np.max(ncic_arrays) + 1
             if numbins < self.max_ncic:

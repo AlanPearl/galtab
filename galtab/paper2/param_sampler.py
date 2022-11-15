@@ -31,8 +31,9 @@ class ParamSampler:
         self.temp_cictab = kwargs["temp_cictab"]
         self.n_mc = kwargs["n_mc"]
         self.min_quant = kwargs["min_quant"]
-        self.max_quant = kwargs["max_quant"]
+        self.max_weight = kwargs["max_weight"]
         self.seed = kwargs["seed"]
+        self.sqiomw = kwargs["sqiomw"]
 
         self.fiducial_params = None
         self.halocat = kwargs.get("halocat")
@@ -157,11 +158,12 @@ class ParamSampler:
         kvals = None if self.kmax is None else np.arange(self.kmax) + 1
         gtab = galtab.GalaxyTabulator(
             self.halocat, self.model, n_mc=self.n_mc, min_quant=self.min_quant,
-            max_quant=self.max_quant, seed=self.seed)
+            max_weight=self.max_weight, seed=self.seed,
+            sat_quant_instead_of_max_weight=self.sqiomw)
         return gtab.tabulate_cic(
             proj_search_radius=self.proj_search_radius,
             cylinder_half_length=self.cylinder_half_length,
-            k_vals=kvals, bin_edges=self.cic_edges)
+            k_vals=kvals, bin_edges=self.cic_edges, analytic_moments=True)
 
     @staticmethod
     def make_prior():
@@ -251,7 +253,7 @@ class ParamSampler:
         if "mock" in model.__dict__:
             model.mock.populate()
         else:
-            model.populate_mock(self.halocat)
+            model.populate_mock(self.cictab.halocat)
 
         gal = model.mock.galaxy_table
         xyz = htmo.return_xyz_formatted_array(
@@ -293,7 +295,7 @@ if __name__ == "__main__":
         help="GalaxyTabulator parameter"
     )
     parser.add_argument(
-        "--max-quant", type=float, metavar="X", default=0.9999,
+        "--max-weight", type=float, metavar="X", default=0.9999,
         help="GalaxyTabulator parameter"
     )
     parser.add_argument(
@@ -310,6 +312,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--temp-cictab", action="store_true",
         help="Create a temporary CICTabulator, and don't save it"
+    )
+    parser.add_argument(
+        "--sqiomw", action="store_true",
+        help="sat_quant instead of max_weight (CICTabulator parameter)"
     )
     parser.add_argument(
         "--use-default-halotools-catalogs", action="store_true"

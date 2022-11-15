@@ -18,9 +18,10 @@ class AccuracyRuntimeTester:
             n_live=10,
             verbose=True,
             temp_cictab=True,
-            n_mc=10,
-            min_quant=0.001,
-            max_quant=0.9999,
+            n_mc=1,
+            min_quant=1e-4,
+            max_weight=0.05,
+            sqiomw=False,
         )
         self.bolplanck_sampler = galtab.paper2.param_sampler.ParamSampler(
             simname="bolplanck", **self.sampler_kw
@@ -28,8 +29,10 @@ class AccuracyRuntimeTester:
         self.smdpl_sampler = galtab.paper2.param_sampler.ParamSampler(
             simname="smdpl", **self.sampler_kw
         )
-        self.bolplanck_halocat = self.bolplanck_sampler.halocat
-        self.smdpl_halocat = self.smdpl_sampler.halocat
+        self.bolplanck_halocat = \
+            self.bolplanck_sampler.cictab.galtabulator.halocat
+        self.smdpl_halocat = \
+            self.smdpl_sampler.cictab.galtabulator.halocat
 
         self.gt_results = None
         self.ht_results = None
@@ -40,11 +43,11 @@ class AccuracyRuntimeTester:
         np.save(file, arr)
 
     def run_ht_trials(self):
-        num_ht_trials = 500
+        num_ht_trials = 250
         ht_results = []
-        for simname in tqdm(["bolplanck", "smdpl"]):
+        for simname in tqdm(["bolplanck", "smdpl"], leave=None):
             for delmock in tqdm([False, True], leave=None):
-                for i in tqdm(range(num_ht_trials)):
+                for i in tqdm(range(num_ht_trials), leave=None):
                     if simname == "bolplanck":
                         sampler = self.bolplanck_sampler
                     else:
@@ -71,17 +74,21 @@ class AccuracyRuntimeTester:
 
     def run_gt_trials(self):
         gt_results = []
-        num_trials = 50
-        simnames = ["bolplanck"]
-        min_quants = [0.1, 0.001, 0.00001]
+        num_trials = 5
+        simnames = ["bolplanck", "smdpl"]
+        min_quants = np.logspace(-2, -5, 4)
+        max_weights = np.geomspace(0.9, 0.01, 8)
         # max_quants = [0.9, 0.999, 0.99999]
-        max_quants = 1 - np.logspace(-1, -8, 20)
-        n_mcs = [1, 3, 5, 10, 20]
+        sat_1quants = np.logspace(-3, -15, 8)
+        sqiomws = [False]*len(max_weights) + [True]*len(sat_1quants)
+        max_weights = [*max_weights, *sat_1quants]
 
-        for simname in tqdm(simnames):
+        for simname in tqdm(simnames, leave=None):
             for min_quant in tqdm(min_quants, leave=None):
-                for max_quant in tqdm(max_quants, leave=None):
-                    for i_trial in tqdm(range(num_trials)):
+                for j in tqdm(range(len(max_weights)), leave=None):
+                    max_weight = max_weights[j]
+                    sqiomw = sqiomws[j]
+                    for i_trial in tqdm(range(num_trials), leave=None):
                         t0 = time()
                         if simname == "smdpl":
                             halocat = self.smdpl_halocat
@@ -91,35 +98,34 @@ class AccuracyRuntimeTester:
                         kw.update(dict(
                             simname=simname,
                             min_quant=min_quant,
-                            max_quant=max_quant,
+                            max_weight=max_weight,
                             halocat=halocat,
-                            n_mc=max(n_mcs)
+                            sqiomw=sqiomw,
                         ))
                         sampler = galtab.paper2.param_sampler.ParamSampler(
                             **kw)
                         tabtime = time() - t0
-                        for n_mc in tqdm(n_mcs, leave=None):
-                            t0 = time()
-                            val, n1, n2 = sampler.predict_cic(
-                                sampler.model, n_mc=n_mc,
-                                return_number_densities=True)
-                            t = time() - t0
+                        t0 = time()
+                        val, n1, n2 = sampler.predict_cic(
+                            sampler.model,
+                            return_number_densities=True)
+                        t = time() - t0
 
-                            results = {}
-                            for i in range(len(val)):
-                                results[f"k{i + 1}"] = val[i]
-                            results["n1"] = n1
-                            results["n2"] = n2
-                            results["time"] = t
-                            results["simname"] = simname
-                            results["min_quant"] = min_quant
-                            results["max_quant"] = max_quant
-                            results["n_mc"] = n_mc
-                            results["tabtime"] = tabtime
-                            results["n_placeholders"] = \
-                                len(sampler.cictab.galtabulator.galaxies)
-                            results["trial_num"] = i_trial
-                            gt_results.append(results)
+                        results = {}
+                        for i in range(len(val)):
+                            results[f"k{i + 1}"] = val[i]
+                        results["n1"] = n1
+                        results["n2"] = n2
+                        results["time"] = t
+                        results["simname"] = simname
+                        results["min_quant"] = min_quant
+                        results["max_weight"] = max_weight
+                        results["sqiomw"] = sqiomw
+                        results["tabtime"] = tabtime
+                        results["n_placeholders"] = \
+                            len(sampler.cictab.galtabulator.galaxies)
+                        results["trial_num"] = i_trial
+                        gt_results.append(results)
         self.gt_results = pd.DataFrame(gt_results)
         return gt_results
 
