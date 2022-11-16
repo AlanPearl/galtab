@@ -264,6 +264,9 @@ class ParamSampler:
 
 
 if __name__ == "__main__":
+    import jax
+    jax.config.update("jax_platform_name", "cpu")
+
     parser = argparse.ArgumentParser(prog="param_sampler")
     parser.formatter_class = argparse.ArgumentDefaultsHelpFormatter
     parser.add_argument(

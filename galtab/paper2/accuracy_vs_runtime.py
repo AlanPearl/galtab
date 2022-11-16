@@ -138,6 +138,9 @@ class AccuracyRuntimeTester:
 
 
 if __name__ == "__main__":
+    import jax
+    jax.config.update("jax_platform_name", "cpu")
+
     output = "accuracy_runtime_results.npy"
     try:
         past_gt_results, past_ht_results = np.load(output, allow_pickle=True)
