@@ -29,9 +29,9 @@ class AccuracyRuntimeTester:
         self.smdpl_sampler = galtab.paper2.param_sampler.ParamSampler(
             simname="smdpl", **self.sampler_kw
         )
-        self.bolplanck_halocat = \
+        self.bolplanck_trimmed_halocat = \
             self.bolplanck_sampler.cictab.galtabulator.halocat
-        self.smdpl_halocat = \
+        self.smdpl_trimmed_halocat = \
             self.smdpl_sampler.cictab.galtabulator.halocat
 
         self.gt_results = None
@@ -43,11 +43,18 @@ class AccuracyRuntimeTester:
         np.save(file, arr)
 
     def run_ht_trials(self):
+        self.bolplanck_sampler.model.populate_mock(
+            self.bolplanck_trimmed_halocat
+        )
+        self.smdpl_sampler.model.populate_mock(
+            self.smdpl_trimmed_halocat
+        )
+
         num_ht_trials = 250
         ht_results = []
-        for simname in tqdm(["bolplanck", "smdpl"], leave=None):
-            for delmock in tqdm([False, True], leave=None):
-                for i in tqdm(range(num_ht_trials), leave=None):
+        for simname in tqdm(["bolplanck", "smdpl"], leave=None, desc="simname"):
+            for delmock in tqdm([False, True], leave=None, desc="delmock"):
+                for i in tqdm(range(num_ht_trials), leave=None, desc="trial_num"):
                     if simname == "bolplanck":
                         sampler = self.bolplanck_sampler
                     else:
@@ -83,17 +90,17 @@ class AccuracyRuntimeTester:
         sqiomws = [False]*len(max_weights) + [True]*len(sat_1quants)
         max_weights = [*max_weights, *sat_1quants]
 
-        for simname in tqdm(simnames, leave=None):
-            for min_quant in tqdm(min_quants, leave=None):
-                for j in tqdm(range(len(max_weights)), leave=None):
+        for simname in tqdm(simnames, leave=None, desc="simname"):
+            for min_quant in tqdm(min_quants, leave=None, desc="min_quant"):
+                for j in tqdm(range(len(max_weights)), leave=None, desc="max_weight"):
                     max_weight = max_weights[j]
                     sqiomw = sqiomws[j]
                     for i_trial in tqdm(range(num_trials), leave=None):
                         t0 = time()
                         if simname == "smdpl":
-                            halocat = self.smdpl_halocat
+                            halocat = self.smdpl_sampler.halocat
                         else:
-                            halocat = self.bolplanck_halocat
+                            halocat = self.bolplanck_sampler.halocat
                         kw = self.sampler_kw.copy()
                         kw.update(dict(
                             simname=simname,
