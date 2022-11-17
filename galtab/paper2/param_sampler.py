@@ -260,7 +260,7 @@ class ParamSampler:
             gal["x"], gal["y"], gal["z"], period=self.halocat.Lbox,
             cosmology=self.cosmo, redshift=self.redshift,
             velocity=gal["vz"], velocity_distortion_dimension="z")
-        return xyz
+        return xyz.astype(np.float64)
 
 
 if __name__ == "__main__":
