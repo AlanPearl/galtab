@@ -253,7 +253,7 @@ class ParamSampler:
         if "mock" in model.__dict__:
             model.mock.populate()
         else:
-            model.populate_mock(self.cictab.halocat)
+            model.populate_mock(self.cictab.galtabulator.halocat)
 
         gal = model.mock.galaxy_table
         xyz = htmo.return_xyz_formatted_array(
