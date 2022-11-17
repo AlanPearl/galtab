@@ -51,8 +51,9 @@ class AccuracyRuntimeTester:
         )
 
         num_ht_trials = 250
+        simnames = ["bolplanck"]  # , "smdpl"]
         ht_results = []
-        for simname in tqdm(["bolplanck", "smdpl"], leave=None, desc="simname"):
+        for simname in tqdm(simnames, leave=None, desc="simname (ht)"):
             for delmock in tqdm([False, True], leave=None, desc="delmock"):
                 for i in tqdm(range(num_ht_trials), leave=None, desc="trial_num"):
                     if simname == "bolplanck":
@@ -82,7 +83,7 @@ class AccuracyRuntimeTester:
     def run_gt_trials(self):
         gt_results = []
         num_trials = 5
-        simnames = ["bolplanck", "smdpl"]
+        simnames = ["bolplanck"]  # , "smdpl"]
         min_quants = np.logspace(-2, -5, 4)
         max_weights = np.geomspace(0.9, 0.01, 8)
         # max_quants = [0.9, 0.999, 0.99999]
@@ -90,7 +91,7 @@ class AccuracyRuntimeTester:
         sqiomws = [False]*len(max_weights) + [True]*len(sat_1quants)
         max_weights = [*max_weights, *sat_1quants]
 
-        for simname in tqdm(simnames, leave=None, desc="simname"):
+        for simname in tqdm(simnames, leave=None, desc="simname (gt)"):
             for min_quant in tqdm(min_quants, leave=None, desc="min_quant"):
                 for j in tqdm(range(len(max_weights)), leave=None, desc="max_weight"):
                     max_weight = max_weights[j]
