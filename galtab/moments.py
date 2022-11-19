@@ -94,6 +94,7 @@ def raw_moments_from_cumulants(kappa):
     return m[1:]
 
 
+@partial(jax.jit, static_argnums=(1,))
 def bernoulli_cumulant(p, k):
     assert k > 0, "There is no 0th Bernoulli cumulant"
     if k == 1:

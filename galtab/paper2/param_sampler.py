@@ -12,7 +12,7 @@ import tabcorr
 import nautilus
 
 import galtab
-from .param_config import simname
+from . import param_config
 
 
 class ParamSampler:
@@ -34,8 +34,8 @@ class ParamSampler:
         self.max_weight = kwargs["max_weight"]
         self.seed = kwargs["seed"]
         self.sqiomw = kwargs["sqiomw"]
+        self.start_without_assembias = kwargs["start_without_assembias"]
 
-        self.fiducial_params = None
         self.halocat = kwargs.get("halocat")
         self.obs = self.load_obs()
         self.cosmo = self.obs["cosmo"].tolist()
@@ -50,6 +50,8 @@ class ParamSampler:
         self.redshift = np.mean([self.obs["zmin"], self.obs["zmax"]])
         self.magthresh = self.obs["abs_mr_max"].tolist()
 
+        self.fiducial_params = None
+        self.gt_params = None
         self.model = self.make_model()
         self.cictab, self.wptab = self.load_tabulators()
         self.prior = self.make_prior()
@@ -123,6 +125,20 @@ class ParamSampler:
         redshift = self.redshift
         magthresh = self.magthresh
 
+        self.fiducial_params = param_config.kuan_params[self.magthresh]
+        self.gt_params = self.fiducial_params.copy()
+
+        self.gt_params["mean_occupation_centrals_assembias_param1"] = 0
+        self.gt_params["mean_occupation_satellites_assembias_param1"] = 0
+        for name in ["logMmin", "logM1", "logM0"]:
+            self.gt_params[name] -= param_config.kuan_err_low[magthresh][name]
+
+        if self.start_without_assembias:
+            self.fiducial_params[
+                "mean_occupation_centrals_assembias_param1"] = 0
+            self.fiducial_params[
+                "mean_occupation_satellites_assembias_param1"] = 0
+
         model = htem.HodModelFactory(
             centrals_occupation=htem.AssembiasZheng07Cens(
                 threshold=magthresh, redshift=redshift),
@@ -131,7 +147,7 @@ class ParamSampler:
             centrals_profile=htem.TrivialPhaseSpace(redshift=redshift),
             satellites_profile=htem.NFWPhaseSpace(redshift=redshift)
         )
-        # self.fiducial_params = self.model.param_dict.copy()
+        model.param_dict.update(self.gt_params)
         return model
 
     def make_halocat(self):
@@ -229,8 +245,8 @@ class ParamSampler:
             return wp
 
     def predict_cic_halotools(self, model, return_number_density=False,
-                              num_threads=1):
-        xyz = self.populate_halotools(model)
+                              num_threads=1, halocat=None):
+        xyz = self.populate_halotools(model, halocat=halocat)
         counts = htmo.counts_in_cylinders(
             xyz, xyz, self.proj_search_radius, self.cylinder_half_length,
             period=self.halocat.Lbox, num_threads=num_threads) - 1
@@ -249,11 +265,13 @@ class ParamSampler:
         else:
             return cic
 
-    def populate_halotools(self, model):
-        if "mock" in model.__dict__:
+    def populate_halotools(self, model, halocat=None):
+        if halocat is None and "mock" in model.__dict__:
             model.mock.populate()
-        else:
+        elif halocat is None:
             model.populate_mock(self.cictab.galtabulator.halocat)
+        else:
+            model.populate_mock(halocat)
 
         gal = model.mock.galaxy_table
         xyz = htmo.return_xyz_formatted_array(
@@ -282,7 +300,7 @@ if __name__ == "__main__":
         help="Directory the observation is saved"
     )
     parser.add_argument(
-        "--simname", type=str, metavar="NAME", default=simname,
+        "--simname", type=str, metavar="NAME", default=param_config.simname,
         help="Name of dark matter simulation"
     )
     parser.add_argument(
@@ -307,6 +325,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true"
+    )
+    parser.add_argument(
+        "--start-without-assembias", action="store_true",
+        help="Start sampling parameter-space at Acen=Asat=0"
     )
     parser.add_argument(
         "-t", "--tabulate-only", action="store_true",
