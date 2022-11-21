@@ -5,7 +5,7 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 
-import galtab.paper2.param_sampler
+from .param_sampler import ParamSampler
 
 
 default_num_ht_trials = 250
@@ -47,16 +47,17 @@ class AccuracyRuntimeTester:
             min_quant=1e-4,
             max_weight=0.05,
             sqiomw=False,
-            start_without_assembias=False,
+            start_without_assembias=True,
+            tabulate_at_starting_params=True,
         )
 
-        self.bolplanck_sampler = galtab.paper2.param_sampler.ParamSampler(
+        self.bolplanck_sampler = ParamSampler(
             simname="bolplanck", **self.sampler_kw
         )
         self.bolplanck_trimmed_halocat = (
             self.bolplanck_sampler.cictab.galtabulator.halocat)
 
-        self.smdpl_sampler = galtab.paper2.param_sampler.ParamSampler(
+        self.smdpl_sampler = ParamSampler(
             simname="smdpl", **self.sampler_kw
         ) if self.also_test_smdpl else None
         self.smdpl_trimmed_halocat = (
@@ -140,7 +141,7 @@ class AccuracyRuntimeTester:
                             halocat=halocat,
                             sqiomw=sqiomw,
                         ))
-                        sampler = galtab.paper2.param_sampler.ParamSampler(
+                        sampler = ParamSampler(
                             **kw)
                         tabtime = time() - t0
                         t0 = time()

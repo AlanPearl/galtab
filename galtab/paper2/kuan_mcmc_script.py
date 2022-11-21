@@ -106,7 +106,7 @@ model = htem.HodModelFactory(
     centrals_profile=htem.TrivialPhaseSpace(redshift=redshift),
     satellites_profile=htem.NFWPhaseSpace(redshift=redshift)
 )
-fiducial_params = model.param_dict.copy()
+starting_params = model.param_dict.copy()
 
 halocat = htsm.CachedHaloCatalog(simname="bolplanck", redshift=redshift)
 model.populate_mock(halocat)
@@ -248,7 +248,7 @@ param_names = ["logMmin", "sigma_logM", "alpha", "logM1", "logM0",
 if start_from_kuan_best_fit:
     initial_state = kuan_best_fits
 else:
-    initial_state = [fiducial_params[x] for x in param_names]
+    initial_state = [starting_params[x] for x in param_names]
 ndim = len(initial_state)
 backend = emcee.backends.HDFBackend("kuan-mcmc-backend.h5")
 if start_new_mcmc:

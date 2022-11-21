@@ -35,6 +35,8 @@ class ParamSampler:
         self.seed = kwargs["seed"]
         self.sqiomw = kwargs["sqiomw"]
         self.start_without_assembias = kwargs["start_without_assembias"]
+        self.tabulate_at_starting_params = kwargs[
+            "tabulate_at_starting_params"]
 
         self.halocat = kwargs.get("halocat")
         self.use_numpy = kwargs.get("use_numpy", False)
@@ -51,7 +53,7 @@ class ParamSampler:
         self.redshift = np.mean([self.obs["zmin"], self.obs["zmax"]])
         self.magthresh = self.obs["abs_mr_max"].tolist()
 
-        self.fiducial_params = None
+        self.starting_params = None
         self.gt_params = None
         self.model = self.make_model()
         self.cictab, self.wptab = self.load_tabulators()
@@ -126,19 +128,24 @@ class ParamSampler:
         redshift = self.redshift
         magthresh = self.magthresh
 
-        self.fiducial_params = param_config.kuan_params[self.magthresh]
-        self.gt_params = self.fiducial_params.copy()
+        self.starting_params = param_config.kuan_params[self.magthresh]
+        self.gt_params = self.starting_params.copy()
 
         self.gt_params["mean_occupation_centrals_assembias_param1"] = 0
         self.gt_params["mean_occupation_satellites_assembias_param1"] = 0
         for name in ["logMmin", "logM1", "logM0"]:
             self.gt_params[name] -= param_config.kuan_err_low[magthresh][name]
+        for name in ["sigma_logM"]:
+            self.gt_params[name] += param_config.kuan_err_high[magthresh][name]
 
         if self.start_without_assembias:
-            self.fiducial_params[
+            self.starting_params[
                 "mean_occupation_centrals_assembias_param1"] = 0
-            self.fiducial_params[
+            self.starting_params[
                 "mean_occupation_satellites_assembias_param1"] = 0
+
+        if self.tabulate_at_starting_params:
+            self.gt_params.update(self.starting_params)
 
         model = htem.HodModelFactory(
             centrals_occupation=htem.AssembiasZheng07Cens(
@@ -188,12 +195,12 @@ class ParamSampler:
         prior.add_parameter("logMmin", dist=(9, 16))
         prior.add_parameter("sigma_logM", dist=(1e-5, 5))
         prior.add_parameter("logM0", dist=(9, 16))
-        prior.add_parameter("logM1", dist=(11, 16))
+        prior.add_parameter("logM1", dist=(10, 16))
         prior.add_parameter("alpha", dist=(1e-5, 5))
         prior.add_parameter(
-            "mean_occupation_centrals_assembias_param1", dist=(0, 1))
+            "mean_occupation_centrals_assembias_param1", dist=(-1, 1))
         prior.add_parameter(
-            "mean_occupation_satellites_assembias_param1", dist=(0, 1))
+            "mean_occupation_satellites_assembias_param1", dist=(-1, 1))
         return prior
 
     def make_logpdf(self):
@@ -331,6 +338,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--start-without-assembias", action="store_true",
         help="Start sampling parameter-space at Acen=Asat=0"
+    )
+    parser.add_argument(
+        "--tabulate-at-starting-params", action="store_true",
+        help="Don't decrease logM1/0/min or increase sigma for tabulation"
     )
     parser.add_argument(
         "-t", "--tabulate-only", action="store_true",
