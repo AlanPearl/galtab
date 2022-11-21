@@ -39,6 +39,7 @@ class ParamSampler:
             "tabulate_at_starting_params"]
 
         self.halocat = kwargs.get("halocat")
+        self.cictab = kwargs.get("cictab")
         self.use_numpy = kwargs.get("use_numpy", False)
         self.obs = self.load_obs()
         self.cosmo = self.obs["cosmo"].tolist()
@@ -55,6 +56,7 @@ class ParamSampler:
 
         self.starting_params = None
         self.gt_params = None
+        self.make_halocat()
         self.model = self.make_model()
         self.cictab, self.wptab = self.load_tabulators()
         self.prior = self.make_prior()
@@ -104,12 +106,15 @@ class ParamSampler:
         cictab_file = self.save_dir / "cictab.npy"
         wptab_file = self.save_dir / "wptab.hdf5"
 
-        if cictab_file.is_file() and not self.temp_cictab:
-            cictab = galtab.CICTabulator.load(cictab_file)
+        if self.cictab is None:
+            if cictab_file.is_file() and not self.temp_cictab:
+                cictab = galtab.CICTabulator.load(cictab_file)
+            else:
+                cictab = self.make_cictab()
+                if not self.temp_cictab:
+                    cictab.save(cictab_file)
         else:
-            cictab = self.make_cictab()
-            if not self.temp_cictab:
-                cictab.save(cictab_file)
+            cictab = self.cictab
 
         wptab = None
         if wptab_file.is_file():
@@ -167,8 +172,6 @@ class ParamSampler:
         # model.populate_mock(halocat)
 
     def make_wptab(self):
-        self.make_halocat()
-
         halotab = tabcorr.TabCorr.tabulate(
             self.halocat, htmo.wp, self.rp_edges, pi_max=self.pimax,
             prim_haloprop_key="halo_mvir", prim_haloprop_bins=100,
@@ -177,8 +180,6 @@ class ParamSampler:
         return halotab
 
     def make_cictab(self):
-        self.make_halocat()
-
         kvals = None if self.kmax is None else np.arange(self.kmax) + 1
         gtab = galtab.GalaxyTabulator(
             self.halocat, self.model, n_mc=self.n_mc, min_quant=self.min_quant,
