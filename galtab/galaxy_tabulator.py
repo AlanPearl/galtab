@@ -101,7 +101,7 @@ def make_placeholder_model(galtab):
 # noinspection PyProtectedMember
 def calc_weights(halos, galaxies, halo_inds, model):
     # TODO: Speed this up with num_ptcl_requirement???
-    weights = np.full_like(galaxies["x"].value, np.nan)
+    weights = np.full(len(galaxies), np.nan, dtype=np.float32)
 
     # Access the occupation component models
     names = [x for x in model._input_model_dictionary

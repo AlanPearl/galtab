@@ -18,6 +18,14 @@ def jit_sum_at(arr_in, ind_in, ind_out, len_out=None, ind_out_is_sorted=False):
     return arr_out
 
 
+def numpy_sum_at(arr_in, ind_in, ind_out, len_out=None):
+    if len_out is None:
+        len_out = len(arr_in)
+    arr_out = np.zeros(len_out, dtype=arr_in.dtype)
+    np.add.at(arr_out, ind_out, arr_in[ind_in])
+    return arr_out
+
+
 def moments_from_samples(samples, k_vals, weights=None):
     kmax = np.max(k_vals)
     weights = np.ones_like(samples) if weights is None else weights

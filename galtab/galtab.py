@@ -230,10 +230,11 @@ class CICTabulator:
             self.indices.sort(order="i1")
 
     def predict(self, model, return_number_densities=False, n_mc=None,
-                reseed_mc=False, warn_p_over_1=True):
+                reseed_mc=False, warn_p_over_1=True, use_numpy=False):
         cic = self.calc_cic(
             model, return_number_densities=return_number_densities,
-            n_mc=n_mc, reseed_mc=reseed_mc, warn_p_over_1=warn_p_over_1)
+            n_mc=n_mc, reseed_mc=reseed_mc, warn_p_over_1=warn_p_over_1,
+            use_numpy=use_numpy)
         n1 = n2 = None
         if return_number_densities:
             cic, n1, n2 = cic
@@ -253,7 +254,7 @@ class CICTabulator:
             return cic
 
     def calc_cic(self, model, return_number_densities=False, n_mc=None,
-                 reseed_mc=False, warn_p_over_1=True):
+                 reseed_mc=False, warn_p_over_1=True, use_numpy=False):
         if reseed_mc:
             self.seed_monte_carlo()
         if n_mc is None:
@@ -266,7 +267,7 @@ class CICTabulator:
         weights = self.galtabulator.calc_weights(model)
         previous_ints = np.ceil(weights).astype(int) - 1
         previous_ints[previous_ints < 0] = 0
-        next_int_probs = weights - previous_ints
+        next_int_probs = weights - previous_ints.astype(np.float32)
         if self.analytic_moments and self.kmax is not None:
             # It was spending ~99% of computational time in np.add.at
             # before replacing np.add.at with jax at[].add()
@@ -281,10 +282,14 @@ class CICTabulator:
                 bc = moments.bernoulli_cumulant(p, k)
 
                 # Sum of Bernoulli cumulants --> Poisson Binomial cumulants
-                pc = moments.jit_sum_at(
-                    bc, indices["i2"], indices["i1"], len_out=n1,
-                    ind_out_is_sorted=self.sort_tabulated_indices)
-                # replace bc with bc[self.sample2_inds] ?
+                if use_numpy:
+                    pc = moments.numpy_sum_at(
+                        bc, indices["i2"], indices["i1"], len_out=n1)
+                else:
+                    pc = moments.jit_sum_at(
+                        bc, indices["i2"], indices["i1"], len_out=n1,
+                        ind_out_is_sorted=self.sort_tabulated_indices)
+                    # replace bc with bc[self.sample2_inds] ?
                 pb_cumulants.append(np.asarray(pc))
 
             pb_raw_moments = moments.raw_moments_from_cumulants(pb_cumulants)

@@ -37,6 +37,7 @@ class ParamSampler:
         self.start_without_assembias = kwargs["start_without_assembias"]
 
         self.halocat = kwargs.get("halocat")
+        self.use_numpy = kwargs.get("use_numpy", False)
         self.obs = self.load_obs()
         self.cosmo = self.obs["cosmo"].tolist()
         if not isinstance(self.cosmo, Cosmology):
@@ -230,7 +231,8 @@ class ParamSampler:
 
     def predict_cic(self, model, return_number_densities=False, n_mc=None):
         return self.cictab.predict(
-            model, return_number_densities=return_number_densities, n_mc=n_mc)
+            model, return_number_densities=return_number_densities,
+            n_mc=n_mc, use_numpy=self.use_numpy)
 
     def predict_wp_halotools(self, model, return_number_density=False,
                              num_threads=1):
