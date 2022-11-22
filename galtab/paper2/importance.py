@@ -15,6 +15,8 @@ default_outfile = "importance_results.npz"
 
 
 class ImportanceCalculator:
+    save_names = ["hod_samples", "obs_samples", "nobs_samples", "cic_moment_numbers"]
+
     def __init__(self):
         self.cic_moment_numbers = np.arange(1, 21)
         self.sampler_kw = dict(
@@ -67,9 +69,8 @@ class ImportanceCalculator:
             cylinder_half_length=self.sampler.cylinder_half_length,
             period=self.sampler.halocat.Lbox)
 
-        cic_moment_numbers = np.arange(1, self.sampler.kmax + 1)
         cic_moments = galtab.moments.moments_from_samples(
-            cic_counts, cic_moment_numbers)
+            cic_counts, self.cic_moment_numbers)
 
         return np.array([ngal, *wp, *cic_moments])
 
@@ -112,16 +113,14 @@ class ImportanceCalculator:
         return normalized_observables * self.obs_std + self.obs_mean
 
     def save(self, file):
-        np.savez(file,
-                 hod_samples=self.hod_samples,
-                 obs_samples=self.obs_samples,
-                 nobs_samples=self.nobs_samples)
+        kw = {name: getattr(self, name) for name in self.save_names}
+        np.savez(file, **kw)
 
     @classmethod
     def load(cls, file):
         npzip = np.load(file, allow_pickle=True)
         new_obj = cls()
-        for name in ["hod_samples", "obs_samples", "nobs_samples"]:
+        for name in cls.save_names:
             setattr(new_obj, name, npzip[name])
         return new_obj
 

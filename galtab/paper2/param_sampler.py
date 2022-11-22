@@ -102,7 +102,8 @@ class ParamSampler:
             self.prior, self.likelihood, n_live=self.n_live)
 
     def load_tabulators(self):
-        self.save_dir.mkdir(parents=True, exist_ok=True)
+        if not self.temp_cictab:
+            self.save_dir.mkdir(parents=True, exist_ok=True)
         cictab_file = self.save_dir / "cictab.npy"
         wptab_file = self.save_dir / "wptab.hdf5"
 
