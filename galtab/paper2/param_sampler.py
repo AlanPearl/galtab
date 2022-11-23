@@ -10,23 +10,32 @@ import halotools.sim_manager.sim_defaults
 import halotools.mock_observables as htmo
 import tabcorr
 import nautilus
+import emcee
 
 import galtab
 from . import param_config
 
 
+default_simname = param_config.simname
+default_sampler_name = "emcee"
+default_nwalkers = 20
+
+
 class ParamSampler:
     def __init__(self, **kwargs):
         self.obs_dir = pathlib.Path(kwargs["obs_dir"])
+        self.n = kwargs["N"]
         self.obs_filename = kwargs["OBS_FILENAME"]
         self.save_dir = pathlib.Path(kwargs["SAVE_DIR"])
-        self.simname = kwargs["simname"]
+        self.simname = kwargs.get("simname", default_simname).lower()
+        self.reset_sampler = kwargs.get("reset_sampler", False)
+        self.sampler_name = kwargs.get("sampler_name", default_sampler_name)
         if kwargs["use_default_halotools_catalogs"]:
             self.version_name = htsm.sim_defaults.default_version_name
         else:
             self.version_name = "my_cosmosim_halos"
 
-        self.n_live = kwargs["n_live"]
+        self.nwalkers = kwargs.get("nwalkers", default_nwalkers)
         self.verbose = kwargs["verbose"]
         self.temp_cictab = kwargs["temp_cictab"]
         self.n_mc = kwargs["n_mc"]
@@ -54,10 +63,15 @@ class ParamSampler:
         self.redshift = np.mean([self.obs["zmin"], self.obs["zmax"]])
         self.magthresh = self.obs["abs_mr_max"].tolist()
 
-        self.starting_params = None
-        self.gt_params = None
+        self.starting_params = {}
+        self.gt_params = {}
+        self.starting_bounds = None
+        self.emcee_init_params = None
         self.make_halocat()
         self.model = self.make_model()
+        self.param_names = list(self.starting_params.keys())
+        self.ndim = len(self.param_names)
+
         self.cictab, self.wptab = self.load_tabulators()
         self.prior = self.make_prior()
         self.logpdf = self.make_logpdf()
@@ -74,6 +88,16 @@ class ParamSampler:
         self.len_cic = cic_slice.stop - cic_slice.start
         assert n_slice.start < wp_slice.start < cic_slice.start
 
+    def __getstate__(self):
+        import pickle
+        for variable_name, value in vars(self).items():
+            try:
+                pickle.dumps(value)
+            except (SystemExit, KeyboardInterrupt):
+                raise
+            except:
+                print(f"{variable_name} with value {value} is not pickleable")
+
     def run(self, verbose=None):
         """
         Runs the nested sampler
@@ -81,15 +105,20 @@ class ParamSampler:
         Returns parameter_samples; also saves log_weights, and log_likelihoods
         """
         verbose = self.verbose if verbose is None else verbose
-        self.sampler.run(verbose=verbose)
+        if self.sampler_name == "emcee":
+            self.sampler.run_mcmc(
+                self.emcee_init_params, nsteps=self.n, progress=verbose)
+        elif self.sampler_name == "nautilus":
+            self.sampler.run(verbose=verbose)
 
-        # TODO: Why doesn't this work?
-        # self.parameter_samples, self.log_weights, \
-        #     self.log_likelihoods = sampler.posterior()
-        return self.parameter_samples
+            # TODO: Why doesn't this work?
+            # self.parameter_samples, self.log_weights, \
+            #     self.log_likelihoods = sampler.posterior()
+            return self.parameter_samples
 
     def save(self, filename):
-        self.model = None
+        self.model = self.obs = self.sampler = self.cosmo = None
+        self.halocat = self.cictab = None
         np.save(filename, np.array([self], dtype=object))
 
     @classmethod
@@ -98,8 +127,24 @@ class ParamSampler:
         return obj
 
     def make_sampler(self):
-        return nautilus.Sampler(
-            self.prior, self.likelihood, n_live=self.n_live)
+        if self.sampler_name == "emcee":
+            backend = emcee.backends.HDFBackend(
+                str(self.save_dir / "emcee_backend.h5"))
+            if self.reset_sampler or not (backend.initialized
+                                          and backend.iteration):
+                backend.reset(self.nwalkers, self.ndim)
+                rng = np.random.RandomState(self.seed)
+                self.emcee_init_params = rng.uniform(
+                    *self.starting_bounds.T,
+                    (self.nwalkers, self.ndim))
+            return emcee.EnsembleSampler(
+                self.nwalkers, self.ndim,
+                self.emcee_prob, backend=backend)
+        elif self.sampler_name == "nautilus":
+            return nautilus.Sampler(
+                self.prior, self.likelihood, n_live=self.n)
+        else:
+            raise ValueError(f"Invalid sampler_name: {self.sampler_name}")
 
     def load_tabulators(self):
         if not self.temp_cictab:
@@ -135,6 +180,13 @@ class ParamSampler:
         magthresh = self.magthresh
 
         self.starting_params = param_config.kuan_params[self.magthresh]
+        err_low = param_config.kuan_err_low[self.magthresh]
+        err_high = param_config.kuan_err_high[self.magthresh]
+        self.starting_bounds = np.array(
+            [[self.starting_params[name] - 0.01 * err_low[name],
+              self.starting_params[name] + 0.01 * err_high[name]]
+             for name in self.starting_params.keys()]
+        )
         self.gt_params = self.starting_params.copy()
 
         self.gt_params["mean_occupation_centrals_assembias_param1"] = 0
@@ -215,6 +267,16 @@ class ParamSampler:
         loglike = self.logpdf(x)
         self.blob[-1]["loglike"] = loglike
         return loglike
+
+    def emcee_prob(self, theta):
+        param_dict = dict(zip(self.param_names, theta))
+        prior = 0
+        for i in range(self.ndim):
+            prior += self.prior.dists[i].logpdf(param_dict[self.prior.keys[i]])
+        if not np.isfinite(prior):
+            return prior
+        else:
+            return prior + sampler.likelihood(param_dict)
 
     def predict_observables(self, param_dict):
         self.model.param_dict.update(param_dict)
@@ -299,6 +361,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="param_sampler")
     parser.formatter_class = argparse.ArgumentDefaultsHelpFormatter
     parser.add_argument(
+        "N", type=int,
+        help="Number of MCMC (or 'live') points to sample"
+    )
+    parser.add_argument(
         "OBS_FILENAME", type=str,
         help="Name of the observation file (should end in .npz)"
     )
@@ -311,12 +377,20 @@ if __name__ == "__main__":
         help="Directory the observation is saved"
     )
     parser.add_argument(
-        "--simname", type=str, metavar="NAME", default=param_config.simname,
+        "--simname", type=str, metavar="NAME", default=default_simname,
         help="Name of dark matter simulation"
     )
     parser.add_argument(
-        "-n", "--n-live", type=int, metavar="N", default=1000,
-        help="Number of 'live points' to sample"
+        "--sampler-name", type=str, default=default_sampler_name,
+        help="Name of the MCMC/nested sampler to use"
+    )
+    parser.add_argument(
+        "--reset-sampler", action="store_true",
+        help="Restart sampler if it has already begun"
+    )
+    parser.add_argument(
+        "--nwalkers", type=int, default=default_nwalkers,
+        help="Number of emcee walkers"
     )
     parser.add_argument(
         "--n-mc", type=int, metavar="N", default=10,

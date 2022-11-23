@@ -40,7 +40,7 @@ class AccuracyRuntimeTester:
             SAVE_DIR="../desi_results/results_20p0/",
             use_default_halotools_catalogs=False,
             seed=None,
-            n_live=10,
+            N=10,
             verbose=True,
             temp_cictab=True,
             n_mc=1,
