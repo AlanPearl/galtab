@@ -170,7 +170,9 @@ class CICTabulator:
         assert sample1_selector is None, "Parameter not implemented"
         assert sample2_selector is None, "Parameter not implemented"
         self.galtabulator = galtabulator
-        self.k_vals = np.array(k_vals, dtype=int)
+        self.k_vals = k_vals
+        if k_vals is not None:
+            self.k_vals = np.array(k_vals, dtype=int)
         assert np.all(self.k_vals == k_vals), "k_vals must be a list of ints"
         self.kmax = np.max(k_vals)
         self.bin_edges = bin_edges

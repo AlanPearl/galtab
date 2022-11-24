@@ -88,16 +88,6 @@ class ParamSampler:
         self.len_cic = cic_slice.stop - cic_slice.start
         assert n_slice.start < wp_slice.start < cic_slice.start
 
-    def __getstate__(self):
-        import pickle
-        for variable_name, value in vars(self).items():
-            try:
-                pickle.dumps(value)
-            except (SystemExit, KeyboardInterrupt):
-                raise
-            except:
-                print(f"{variable_name} with value {value} is not pickleable")
-
     def run(self, verbose=None):
         """
         Runs the nested sampler
