@@ -36,6 +36,7 @@ class ImportanceCalculator:
             tabulate_at_starting_params=True,
             simname="bolplanck",
             cictab="none",
+            sampler_name="nautilus",  # (so it doesn't try making a backend.h5 file)
         )
 
         self.sampler = ParamSampler(**self.sampler_kw)

@@ -49,6 +49,7 @@ class AccuracyRuntimeTester:
             sqiomw=False,
             start_without_assembias=True,
             tabulate_at_starting_params=True,
+            sampler_name="nautilus",  # (so it doesn't try making a backend.h5 file)
         )
 
         self.bolplanck_sampler = ParamSampler(
