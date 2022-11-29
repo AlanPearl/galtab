@@ -14,10 +14,12 @@ conda create -n py39-galtab python=3.9
 conda activate py39-galtab
 conda install -c conda-forge mpi4py openmpi=4.1.4=ha1ae619_100
 ```
-### Optional prerequisites to run scripts in the paper2 subpackage
+### Optional dependencies to run scripts in the paper2 subpackage
 - mocksurvey and pycorr (instructions at https://github.com/AlanPearl/mocksurvey)
 - tabcorr (`pip install tabcorr`)
+- emcee (`pip install emcee`)
 - nautilus (`pip install nautilus-sampler`)
+- uncertainties (`pip install uncertainties`)
 
 # Installation
 ```
