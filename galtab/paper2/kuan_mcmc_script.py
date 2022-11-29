@@ -12,7 +12,8 @@ import halotools.sim_manager as htsm
 import mocksurvey as ms
 import galtab
 from .param_config import pimax, proj_search_radius, cylinder_half_length, \
-    rp_edges, cic_edges, cic_kmax
+    rp_edges, cic_edges
+cic_kmax = 5
 
 # Make sure Corrfunc is installed, or else this will run VERY slow
 assert ms.cf.corrfunc_works

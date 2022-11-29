@@ -44,7 +44,5 @@ setup(name="galtab",
           "pathlib"
       ],
       zip_safe=True,
-      test_suite="nose.collector",
-      tests_require=["nose"],
       **build_kwargs
       )
