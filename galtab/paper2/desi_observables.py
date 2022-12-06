@@ -76,12 +76,17 @@ class ObservableCalculator:
         if self.progress:
             cic_iterator = tqdm(
                 cic_iterator, desc="Completed CiC jackknife samples")
-        cic_jacks = [self.jack_cic(x) for x in cic_iterator]
 
-        cic_lengths = [len(x) for x in cic_jacks]
-        cic_pads = [max(cic_lengths) - x for x in cic_lengths]
-        cic_jacks = np.array([np.pad(x, (0, y)) for (x, y)
-                              in zip(cic_jacks, cic_pads)])
+        if self.cic_kmax is None or self.cic_kmax:
+            cic_jacks = [self.jack_cic(x) for x in cic_iterator]
+
+            cic_lengths = [len(x) for x in cic_jacks]
+            cic_pads = [max(cic_lengths) - x for x in cic_lengths]
+            cic_jacks = np.array([np.pad(x, (0, y)) for (x, y)
+                                  in zip(cic_jacks, cic_pads)])
+        else:
+            # Return length 0 arrays if kmax = 0
+            cic_jacks = np.array([[] for _ in cic_iterator])
 
         self.slice_n = slice(0, 1)
         self.slice_wp = slice(self.slice_n.stop,

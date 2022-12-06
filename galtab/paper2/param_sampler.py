@@ -81,6 +81,9 @@ class ParamSampler:
         self.log_weights = None
         self.log_likelihoods = None
         self.blob = []
+        saved_filename = kwargs.get("saved_filename", "sampler.npy")
+        if pathlib.Path(saved_filename).is_file():
+            self.blob = ParamSampler.load(saved_filename).blob
 
         n_slice = self.obs["slice_n"].tolist()
         wp_slice = self.obs["slice_wp"].tolist()
@@ -107,8 +110,8 @@ class ParamSampler:
             return self.parameter_samples
 
     def save(self, filename):
-        self.model = self.obs = self.sampler = self.cosmo = None
-        self.halocat = self.cictab = None
+        self.obs = self.cosmo = self.model = self.halocat = None
+        self.cictab = self.sampler = None
         np.save(filename, np.array([self], dtype=object))
 
     @classmethod
@@ -213,6 +216,7 @@ class ParamSampler:
                 version_name=self.version_name)
             self.halocat.cosmology = self.cosmo
         # model.populate_mock(halocat)
+        return self.halocat
 
     def make_wptab(self):
         halotab = tabcorr.TabCorr.tabulate(
@@ -272,11 +276,13 @@ class ParamSampler:
         self.model.param_dict.update(param_dict)
         n, wp = self.predict_wp(
             self.model, return_number_density=True)
-        cic, n2, n3 = self.predict_cic(
-            self.model, return_number_densities=True)
-
-        if np.isnan(cic[0]):
-            cic = np.zeros(self.len_cic)
+        if self.kmax is None or self.kmax:
+            cic, n2, n3 = self.predict_cic(
+                self.model, return_number_densities=True)
+            if np.isnan(cic[0]):
+                cic = np.full(self.len_cic, -99)
+        else:
+            cic, n2, n3 = [], None, None
 
         self.blob.append({"param_dict": param_dict,
                           "n": n, "n2": n2, "n3": n3,
@@ -387,11 +393,11 @@ if __name__ == "__main__":
         help="GalaxyTabulator parameter"
     )
     parser.add_argument(
-        "--min-quant", type=float, metavar="X", default=0.001,
+        "--min-quant", type=float, metavar="X", default=1e-4,
         help="GalaxyTabulator parameter"
     )
     parser.add_argument(
-        "--max-weight", type=float, metavar="X", default=0.9999,
+        "--max-weight", type=float, metavar="X", default=0.05,
         help="GalaxyTabulator parameter"
     )
     parser.add_argument(
@@ -416,6 +422,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--temp-cictab", action="store_true",
         help="Create a temporary CICTabulator, and don't save it"
+    )
+    parser.add_argument(
+        "--use-numpy", action="store_true",
+        help="Use NumPy instead of JAX (slower, but it never seg faults)"
     )
     parser.add_argument(
         "--sqiomw", action="store_true",

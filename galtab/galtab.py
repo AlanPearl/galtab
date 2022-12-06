@@ -200,6 +200,8 @@ class CICTabulator:
         self.mc_rands = self.seed_monte_carlo()
         self.indices = None
 
+        self.proj_search_radius = proj_search_radius
+        self.cylinder_half_length = cylinder_half_length
         self.tabulate(proj_search_radius=proj_search_radius,
                       cylinder_half_length=cylinder_half_length, **kwargs)
 
@@ -226,7 +228,7 @@ class CICTabulator:
         self.indices = htmo.counts_in_cylinders(**kwargs)[1]
 
         # Remove self-counting!
-        # TODO: Do this in a way that doesn't break if sample1 != sample2
+        # TODO: Is there a way that allows sample1 and sample2 to differ?
         self.indices = self.indices[self.indices["i1"] != self.indices["i2"]]
         if self.sort_tabulated_indices:
             self.indices.sort(order="i1")
@@ -269,7 +271,6 @@ class CICTabulator:
         weights = self.galtabulator.calc_weights(model)
         previous_ints = np.ceil(weights).astype(int) - 1
         previous_ints[previous_ints < 0] = 0
-        next_int_probs = weights - previous_ints.astype(np.float32)
         if self.analytic_moments and self.kmax is not None:
             # It was spending ~99% of computational time in np.add.at
             # before replacing np.add.at with jax at[].add()
@@ -280,8 +281,7 @@ class CICTabulator:
             pb_cumulants = []
             for k in range(1, self.kmax + 1):
                 # Bernoulli cumulant
-                p = weights if k == 1 else next_int_probs
-                bc = moments.bernoulli_cumulant(p, k)
+                bc = moments.bernoulli_cumulant(weights, k)
 
                 # Sum of Bernoulli cumulants --> Poisson Binomial cumulants
                 if use_numpy:
@@ -302,11 +302,12 @@ class CICTabulator:
             cic = np.array([cic[k-1] if k > 0 else 1 for k in self.k_vals])
 
         else:
+            next_int_probs = weights - previous_ints.astype(np.float32)
             mc_num_arrays = previous_ints[:, None] + (mc_rands <
                                                       next_int_probs[:, None])
 
             ncic_arrays = moments.jit_sum_at(
-                mc_num_arrays, indices["i2"], indices["i2"],
+                mc_num_arrays, indices["i2"], indices["i1"],
                 len_out=(n1, n_mc),
                 ind_out_is_sorted=self.sort_tabulated_indices)
             # replace mc_num_arrays with mc_num_arrays[self.sample2_inds] ?
@@ -316,9 +317,10 @@ class CICTabulator:
                 ncic_arrays1 = ncic_arrays + (numbins * np.arange(n_mc))
 
                 ncic_hists = np.bincount(
-                    ncic_arrays1.ravel(), weights=mc_num_arrays.ravel(),
+                    ncic_arrays1.ravel(), weights=np.repeat(weights, n_mc),
                     minlength=numbins * n_mc).reshape(n_mc, -1)
-                p_ncic_configs = ncic_hists / np.sum(mc_num_arrays, axis=0)[:, None]
+                p_ncic_configs = ncic_hists / np.sum(ncic_hists,
+                                                     axis=1)[:, None]
                 cic = np.nanmean(p_ncic_configs, axis=0)
             else:
                 cic = np.array([np.nan])
