@@ -21,6 +21,25 @@ default_sampler_name = "emcee"
 default_nwalkers = 20
 
 
+class BetterMultivariateNormal:
+    def __init__(self, mean, cov, allow_singular=False):
+        # Factor to multiply parameters by
+        self.norm = 1 / np.sqrt(np.diag(cov))
+        # Factor to *add* to log(PDF)
+        self.logpdf_factor = np.sum(np.log(self.norm))
+
+        # Construct a normalized multivariate normal distribution
+        mean = mean * self.norm
+        cov = cov * self.norm[:, None] * self.norm[None, :]
+        self.normalized_dist = scipy.stats.multivariate_normal(
+            mean=mean, cov=cov, allow_singular=allow_singular)
+        self.cov_info = self.normalized_dist.cov_info
+
+    def logpdf(self, x):
+        x = self.norm * x
+        return self.normalized_dist.logpdf(x) + self.logpdf_factor
+
+
 class ParamSampler:
     def __init__(self, **kwargs):
         self.obs_dir = pathlib.Path(kwargs["obs_dir"])
@@ -74,7 +93,7 @@ class ParamSampler:
 
         self.cictab, self.wptab = self.load_tabulators()
         self.prior = self.make_prior()
-        self.logpdf = self.make_logpdf()
+        self.likelihood_dist = self.make_likelihood_dist()
         self.sampler = self.make_sampler()
 
         self.parameter_samples = None
@@ -142,7 +161,7 @@ class ParamSampler:
     def load_tabulators(self):
         if not self.temp_cictab:
             self.save_dir.mkdir(parents=True, exist_ok=True)
-        cictab_file = self.save_dir / "cictab.npy"
+        cictab_file = self.save_dir / "cictab.pickle"
         wptab_file = self.save_dir / "wptab.hdf5"
 
         if self.cictab is None:
@@ -172,9 +191,9 @@ class ParamSampler:
         redshift = self.redshift
         magthresh = self.magthresh
 
-        self.starting_params = param_config.kuan_params[self.magthresh]
-        err_low = param_config.kuan_err_low[self.magthresh]
-        err_high = param_config.kuan_err_high[self.magthresh]
+        self.starting_params = param_config.kuan_params[magthresh]
+        err_low = param_config.kuan_err_low[magthresh]
+        err_high = param_config.kuan_err_high[magthresh]
         self.starting_bounds = np.array(
             [[self.starting_params[name] - 0.01 * err_low[name],
               self.starting_params[name] + 0.01 * err_high[name]]
@@ -251,14 +270,17 @@ class ParamSampler:
             "mean_occupation_satellites_assembias_param1", dist=(-1, 1))
         return prior
 
-    def make_logpdf(self):
+    def make_likelihood_dist(self):
         mean, cov = self.obs["mean"], self.obs["cov"]
-        return scipy.stats.multivariate_normal(
-            mean=mean, cov=cov, allow_singular=True).logpdf
+        obs_to_nobs = 1 / np.sqrt(np.diag(cov))
+        mean = mean * obs_to_nobs
+        cov = cov * obs_to_nobs[:, None] * obs_to_nobs[None, :]
+        return BetterMultivariateNormal(
+            mean=mean, cov=cov, allow_singular=True)
 
     def likelihood(self, param_dict):
         x = self.predict_observables(param_dict)
-        loglike = self.logpdf(x)
+        loglike = self.likelihood_dist.logpdf(x)
         self.blob[-1]["loglike"] = loglike
         return loglike
 
@@ -277,16 +299,18 @@ class ParamSampler:
         n, wp = self.predict_wp(
             self.model, return_number_density=True)
         if self.kmax is None or self.kmax:
-            cic, n2, n3 = self.predict_cic(
-                self.model, return_number_densities=True)
+            cic, n2, n3, warn_status = self.predict_cic(
+                self.model, return_number_densities=True,
+                warn_p_over_1="return_warning")
             if np.isnan(cic[0]):
                 cic = np.full(self.len_cic, -99)
         else:
-            cic, n2, n3 = [], None, None
+            # No calculations necessary for kmax = 0
+            cic, n2, n3, warn_status = [], None, None, {}
 
         self.blob.append({"param_dict": param_dict,
                           "n": n, "n2": n2, "n3": n3,
-                          "wp": wp, "cic": cic})
+                          "wp": wp, "cic": cic, **warn_status})
         return np.array([n, *wp, *cic])
 
     def predict_wp(self, model, return_number_density=False):
@@ -296,10 +320,11 @@ class ParamSampler:
         else:
             return wp
 
-    def predict_cic(self, model, return_number_densities=False, n_mc=None):
+    def predict_cic(self, model, return_number_densities=False,
+                    n_mc=None, warn_p_over_1=True):
         return self.cictab.predict(
             model, return_number_densities=return_number_densities,
-            n_mc=n_mc, use_numpy=self.use_numpy)
+            n_mc=n_mc, use_numpy=self.use_numpy, warn_p_over_1=warn_p_over_1)
 
     def predict_wp_halotools(self, model, return_number_density=False,
                              num_threads=1):

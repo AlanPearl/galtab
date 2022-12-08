@@ -1,4 +1,5 @@
 from copy import copy
+import pickle
 import numpy as np
 import pandas as pd
 
@@ -100,12 +101,13 @@ class GalaxyTabulator:
     def calc_weights(self, model):
         self.weights = gt.calc_weights(
             self.halo_table, self.galaxies, self.halo_inds,
-            model)
+            model) * self.sample_fraction
         # TODO: Could be more efficient to just throw out a fraction
         # TODO: of the tabulated galaxy sample at the start
-        return self.weights * self.sample_fraction
+        return self.weights
 
     def tabulate_cic(self, **kwargs):
+        # TODO: Replace kwargs with actual arguments for tab-complete-ability
         self.predictor = CICTabulator(self, **kwargs)
         return self.predictor
 
@@ -235,13 +237,48 @@ class CICTabulator:
 
     def predict(self, model, return_number_densities=False, n_mc=None,
                 reseed_mc=False, warn_p_over_1=True, use_numpy=False):
-        cic = self.calc_cic(
+        """
+        Perform tabulation-accelerated prediction
+
+        Parameters
+        ----------
+        model : halotools.empirical_models.ModelFactory
+            Halotools model we want to evaluate CiC for
+        return_number_densities : bool [Optional]
+            Return number densities of both samples n1 and n2
+        n_mc : int [Optional]
+            Number of Monte-Carlo realizations (ignored in analytic moments)
+        reseed_mc : bool [Optional]
+            Reseed the CICTabulator's Monte Carlo realization generator
+        warn_p_over_1 : bool | str [Optional]
+            If true (default), print a warning if any placeholder weights > 1
+            If string starting with "return", return warn_status, don't print
+        use_numpy : bool [Optional]
+            Use NumPy instead of JAX's add.at function. It is slower, but
+            JAX sometimes seg-faults with no error message (I think this
+            only happens if there are insufficient computing resources?)
+
+        Returns
+        -------
+        cic : np.ndarray
+            Values of P(Ncic) or moments specified by k_vals
+        [n1] : float
+            Number density of sample1. Only returned if return_number_densities
+        [n2] : float
+            n2 always = n1 for now. Only returned if return_number_densities
+        [warn_status] : dict
+            Dictionary specifying the warning status. Only returned if
+            warn_p_over_1 is a string starting with "return"
+        """
+        result = self.calc_cic(
             model, return_number_densities=return_number_densities,
             n_mc=n_mc, reseed_mc=reseed_mc, warn_p_over_1=warn_p_over_1,
             use_numpy=use_numpy)
         n1 = n2 = None
         if return_number_densities:
-            cic, n1, n2 = cic
+            cic, n1, n2, warn_status = result
+        else:
+            cic, warn_status = result
 
         if self.analytic_moments and self.k_vals is not None:
             pass
@@ -252,8 +289,16 @@ class CICTabulator:
             hist = np.histogram(
                 np.arange(len(cic)), self.bin_edges, weights=cic)[0]
             cic = hist / hist.sum() / np.diff(self.bin_edges)
+
+        return_warn_status = (hasattr(warn_p_over_1, "lower") and
+                              warn_p_over_1.lower().startswith("return"))
         if return_number_densities:
-            return cic, n1, n2
+            if return_warn_status:
+                return cic, n1, n2, warn_status
+            else:
+                return cic, n1, n2
+        elif return_warn_status:
+            return cic, warn_status
         else:
             return cic
 
@@ -271,13 +316,24 @@ class CICTabulator:
         weights = self.galtabulator.calc_weights(model)
         previous_ints = np.ceil(weights).astype(int) - 1
         previous_ints[previous_ints < 0] = 0
+
+        warn_raised = False
+        n_bad_weights, mean_bad_weight = None, None
+        if warn_p_over_1 and np.any(previous_ints):
+            warn_raised = True
+            bad_weights = weights[previous_ints != 0]
+            n_bad_weights = len(bad_weights)
+            mean_bad_weight = bad_weights.mean()
+            if hasattr(warn_p_over_1, "lower") and warn_p_over_1.lower(
+            ).startswith("return"):
+                pass
+            else:
+                print(f"WARNING: There are {n_bad_weights} placeholders "
+                      f"with weight>1, averaging: {mean_bad_weight}")
+
         if self.analytic_moments and self.kmax is not None:
             # It was spending ~99% of computational time in np.add.at
             # before replacing np.add.at with jax at[].add()
-            if warn_p_over_1 and np.any(previous_ints):
-                bad_weights = weights[previous_ints != 0]
-                print(f"WARNING: There are {len(bad_weights)} placeholders "
-                      f"with weight>1, averaging: {bad_weights.mean()}")
             pb_cumulants = []
             for k in range(1, self.kmax + 1):
                 # Bernoulli cumulant
@@ -325,6 +381,9 @@ class CICTabulator:
             else:
                 cic = np.array([np.nan])
 
+        warn_status = {"warn_raised": warn_raised,
+                       "n_bad_weights": n_bad_weights,
+                       "mean_bad_weight": mean_bad_weight}
         if return_number_densities:
             vol = np.product(self.galtabulator.halocat.Lbox)
             weights1 = weights  # [self.sample1_inds]
@@ -332,16 +391,18 @@ class CICTabulator:
             # weights2 = weights[self.sample2_inds]
             n2 = n1  # np.sum(weights2) / vol
 
-            return cic, n1, n2
+            return cic, n1, n2, warn_status
         else:
-            return cic
+            return cic, warn_status
 
     def save(self, filename):
-        np.save(filename, np.array([self], dtype=object))
+        with open(filename, "wb") as f:
+            pickle.dump(self, f, protocol=4)
 
     @classmethod
     def load(cls, filename):
-        obj = np.load(filename, allow_pickle=True)[0]
+        with open(filename, "rb") as f:
+            obj = pickle.load(f)
         assert isinstance(obj, cls)
         return obj
 

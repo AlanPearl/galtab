@@ -14,7 +14,7 @@ parser.add_argument(
 parser.add_argument(
     "-o", "--outfile", type=str, default="out_array.npy")
 parser.add_argument(
-    "-w", "--wait-time", type=float, default=0.0)
+    "-w", "--wait-time", type=float, default=1e-3)
 
 a = parser.parse_args()
 progress = a.progress
@@ -55,7 +55,7 @@ for i in job_assignments:
     job_results[i] = job(i)
 
 print(f"Worker {comm_rank} job results: {job_results}")
-job_results_gathered = comm.allgather(job_results)
+job_results_gathered = comm.gather(job_results)
 if comm_rank == 0:
     job_results_reassembled = [job_results_gathered[i % comm_size][i]
                                for i in range(num_jobs)]
