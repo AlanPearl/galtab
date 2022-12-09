@@ -24,7 +24,9 @@ default_nwalkers = 20
 class BetterMultivariateNormal:
     def __init__(self, mean, cov, allow_singular=False):
         # Factor to multiply parameters by
-        self.norm = 1 / np.sqrt(np.diag(cov))
+        inv_norm = np.sqrt(np.diag(cov))
+        inv_norm[inv_norm == 0] = 1
+        self.norm = 1 / inv_norm
         # Factor to *add* to log(PDF)
         self.logpdf_factor = np.sum(np.log(self.norm))
 
