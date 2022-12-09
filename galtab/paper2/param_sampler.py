@@ -274,9 +274,6 @@ class ParamSampler:
 
     def make_likelihood_dist(self):
         mean, cov = self.obs["mean"], self.obs["cov"]
-        obs_to_nobs = 1 / np.sqrt(np.diag(cov))
-        mean = mean * obs_to_nobs
-        cov = cov * obs_to_nobs[:, None] * obs_to_nobs[None, :]
         return BetterMultivariateNormal(
             mean=mean, cov=cov, allow_singular=True)
 
@@ -294,7 +291,7 @@ class ParamSampler:
         if not np.isfinite(prior):
             return prior
         else:
-            return prior + sampler.likelihood(param_dict)
+            return prior + self.likelihood(param_dict)
 
     def predict_observables(self, param_dict):
         self.model.param_dict.update(param_dict)
