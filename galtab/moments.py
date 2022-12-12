@@ -95,7 +95,7 @@ def raw_moments_from_cumulants(kappa):
     for n in range(1, len(kappa)):
         m_n = kappa[n]
         if np.ndim(m_n):
-            m_n = np.array(m_n)
+            m_n = np.array(m_n, copy=True)
         for i in range(1, n):
             m_n += math.comb(n - 1, i - 1) * kappa[i]*m[n-i]
         m.append(m_n)
@@ -104,7 +104,7 @@ def raw_moments_from_cumulants(kappa):
 
 @partial(jax.jit, static_argnums=(1,))
 def bernoulli_cumulant(p, k):
-    assert k > 0, "There is no 0th Bernoulli cumulant"
+    assert k > 0, "Start at the 1st cumulant"
     if k == 1:
         ans = p
     elif k == 2:

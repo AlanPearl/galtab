@@ -280,6 +280,8 @@ class ParamSampler:
     def likelihood(self, param_dict):
         x = self.predict_observables(param_dict)
         loglike = self.likelihood_dist.logpdf(x)
+        if np.isnan(loglike):
+            loglike = -np.inf  # assume overflow error -> zero likelihood
         self.blob[-1]["loglike"] = loglike
         return loglike
 
@@ -301,8 +303,6 @@ class ParamSampler:
             cic, n2, n3, warn_status = self.predict_cic(
                 self.model, return_number_densities=True,
                 warn_p_over_1="return_warning")
-            if np.isnan(cic[0]):
-                cic = np.full(self.len_cic, -99)
         else:
             # No calculations necessary for kmax = 0
             cic, n2, n3, warn_status = [], None, None, {}

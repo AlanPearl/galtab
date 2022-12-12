@@ -177,7 +177,8 @@ class CICTabulator:
         if k_vals is not None:
             self.k_vals = np.array(k_vals, dtype=int)
             self.kmax = np.max(k_vals, initial=0)
-        assert np.all(self.k_vals == k_vals), "k_vals must be a list of ints"
+            assert np.min(k_vals, initial=1) > 0, "Lowest allowed k_val is 1"
+            assert np.all(self.k_vals == k_vals), "k_vals must be list of ints"
         self.bin_edges = bin_edges
         self.sample1_selector = sample1_selector
         self.sample2_selector = sample2_selector
@@ -388,11 +389,11 @@ class CICTabulator:
         if return_number_densities:
             vol = np.product(self.galtabulator.halocat.Lbox)
             weights1 = weights  # [self.sample1_inds]
-            n1 = np.sum(weights1) / vol
+            n_density1 = np.sum(weights1) / vol
             # weights2 = weights[self.sample2_inds]
-            n2 = n1  # np.sum(weights2) / vol
+            n_density2 = n_density1  # np.sum(weights2) / vol
 
-            return cic, n1, n2, warn_status
+            return cic, n_density1, n_density2, warn_status
         else:
             return cic, warn_status
 
