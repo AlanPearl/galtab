@@ -36,7 +36,12 @@ class BetterMultivariateNormal:
         corr_matrix = cov * self.norm[:, None] * self.norm[None, :]
         self.normalized_dist = scipy.stats.multivariate_normal(
             mean=norm_mean, cov=corr_matrix, allow_singular=allow_singular)
-        self.cov_object = self.normalized_dist.cov_object
+
+        if hasattr(self.normalized_dist, "cov_object"):
+            # cov_info changes to cov_object in scipy 1.10
+            self.cov_object = self.normalized_dist.cov_object
+        else:
+            self.cov_object = self.normalized_dist.cov_info
 
     def logpdf(self, x):
         x = self.norm * x
