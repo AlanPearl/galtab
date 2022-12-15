@@ -23,19 +23,20 @@ default_nwalkers = 20
 
 class BetterMultivariateNormal:
     def __init__(self, mean, cov, allow_singular=False):
-        # Factor to multiply parameters by
+        # Factor to multiply observables by
+        # For float64, don't scale where std is less than ~ 10^(-308)
         inv_norm = np.sqrt(np.diag(cov))
-        inv_norm[inv_norm == 0] = 1
+        inv_norm[inv_norm < 2 ** np.finfo(inv_norm.dtype.type).minexp] = 1
         self.norm = 1 / inv_norm
         # Factor to *add* to log(PDF)
         self.logpdf_factor = np.sum(np.log(self.norm))
 
         # Construct a normalized multivariate normal distribution
-        mean = mean * self.norm
-        cov = cov * self.norm[:, None] * self.norm[None, :]
+        norm_mean = mean * self.norm
+        corr_matrix = cov * self.norm[:, None] * self.norm[None, :]
         self.normalized_dist = scipy.stats.multivariate_normal(
-            mean=mean, cov=cov, allow_singular=allow_singular)
-        self.cov_info = self.normalized_dist.cov_info
+            mean=norm_mean, cov=corr_matrix, allow_singular=allow_singular)
+        self.cov_object = self.normalized_dist.cov_object
 
     def logpdf(self, x):
         x = self.norm * x
@@ -321,6 +322,12 @@ class ParamSampler:
 
     def predict_cic(self, model, return_number_densities=False,
                     n_mc=None, warn_p_over_1=True):
+        """
+        :type model: object
+        :type return_number_densities: bool
+        :type n_mc: None | int
+        :type warn_p_over_1: bool | str
+        """
         return self.cictab.predict(
             model, return_number_densities=return_number_densities,
             n_mc=n_mc, use_numpy=self.use_numpy, warn_p_over_1=warn_p_over_1)
