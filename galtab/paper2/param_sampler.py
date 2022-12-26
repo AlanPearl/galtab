@@ -199,14 +199,7 @@ class ParamSampler:
         redshift = self.redshift
         magthresh = self.magthresh
 
-        self.starting_params = param_config.kuan_params[magthresh]
-        err_low = param_config.kuan_err_low[magthresh]
-        err_high = param_config.kuan_err_high[magthresh]
-        self.starting_bounds = np.array(
-            [[self.starting_params[name] - 0.01 * err_low[name],
-              self.starting_params[name] + 0.01 * err_high[name]]
-             for name in self.starting_params.keys()]
-        )
+        self.starting_params = param_config.kuan_params[magthresh].copy()
         self.gt_params = self.starting_params.copy()
 
         self.gt_params["mean_occupation_centrals_assembias_param1"] = 0
@@ -216,11 +209,13 @@ class ParamSampler:
         for name in ["sigma_logM"]:
             self.gt_params[name] += param_config.kuan_err_high[magthresh][name]
 
+        err_low = param_config.kuan_err_low[magthresh].copy()
+        err_high = param_config.kuan_err_high[magthresh].copy()
         if self.start_without_assembias:
-            self.starting_params[
-                "mean_occupation_centrals_assembias_param1"] = 0
-            self.starting_params[
-                "mean_occupation_satellites_assembias_param1"] = 0
+            for galtype in ("centrals", "satellites"):
+                name = f"mean_occupation_{galtype}_assembias_param1"
+                self.starting_params[name] = 0
+                err_low[name] = err_high[name] = 0.5
 
         if self.tabulate_at_starting_params:
             self.gt_params.update(self.starting_params)
@@ -234,6 +229,16 @@ class ParamSampler:
             satellites_profile=htem.NFWPhaseSpace(redshift=redshift)
         )
         model.param_dict.update(self.gt_params)
+
+        self.starting_params = convert_params_model_to_sampler(
+            self.starting_params)
+        err_low["logM0_quant"] = err_low["logM0"]
+        err_high["logM0_quant"] = err_high["logM0"]
+        self.starting_bounds = np.array(
+            [[self.starting_params[name] - 0.01 * err_low[name],
+              self.starting_params[name] + 0.01 * err_high[name]]
+             for name in self.starting_params.keys()]
+        )
         return model
 
     def make_halocat(self):
@@ -269,8 +274,8 @@ class ParamSampler:
         prior = nautilus.Prior()
         prior.add_parameter("logMmin", dist=(9, 16))
         prior.add_parameter("sigma_logM", dist=(1e-5, 5))
-        prior.add_parameter("logM0", dist=(9, 16))
         prior.add_parameter("logM1", dist=(10, 16))
+        prior.add_parameter("logM0_quant", dist=(0, 1))
         prior.add_parameter("alpha", dist=(1e-5, 5))
         prior.add_parameter(
             "mean_occupation_centrals_assembias_param1", dist=(-1, 1))
@@ -299,6 +304,7 @@ class ParamSampler:
         if not np.isfinite(prior):
             return prior
         else:
+            param_dict = convert_params_sampler_to_model(param_dict)
             return prior + self.likelihood(param_dict)
 
     def predict_observables(self, param_dict):
@@ -384,6 +390,24 @@ class ParamSampler:
             cosmology=self.cosmo, redshift=self.redshift,
             velocity=gal["vz"], velocity_distortion_dimension="z")
         return xyz.astype(np.float64)
+
+
+def convert_params_sampler_to_model(param_dict):
+    param_dict = param_dict.copy()
+    # Convert logM0_quant to logM0 for halotools model
+    logm0_range = param_dict["logM1"] - (logm0_min := param_dict["logMmin"])
+    param_dict["logM0"] = logm0_min + param_dict["logM0_quant"] * logm0_range
+    del param_dict["logM0_quant"]
+    return param_dict
+
+
+def convert_params_model_to_sampler(param_dict):
+    param_dict = param_dict.copy()
+    # Convert logM0 to logM0_quant for MCMC sampler
+    logm0_range = param_dict["logM1"] - (logm0_min := param_dict["logMmin"])
+    param_dict["logM0_quant"] = (param_dict["logM0"] - logm0_min) / logm0_range
+    del param_dict["logM0"]
+    return param_dict
 
 
 if __name__ == "__main__":
