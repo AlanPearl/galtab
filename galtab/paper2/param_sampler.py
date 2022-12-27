@@ -77,6 +77,7 @@ class ParamSampler:
         self.halocat = kwargs.get("halocat")
         self.cictab = kwargs.get("cictab")
         self.use_numpy = kwargs.get("use_numpy", False)
+        self.use_halotools = kwargs.get("use_halotools", False)
         self.obs = self.load_obs()
         self.cosmo = self.obs["cosmo"].tolist()
         if not isinstance(self.cosmo, Cosmology):
@@ -308,17 +309,29 @@ class ParamSampler:
             return prior + self.likelihood(param_dict)
 
     def predict_observables(self, param_dict):
+        # Update model parameters
         self.model.param_dict.update(param_dict)
+
+        # Calculate wp
         n, wp = self.predict_wp(
             self.model, return_number_density=True)
+
+        # Calculate CiC
+        warn_status = {}
         if self.kmax is None or self.kmax:
-            cic, n2, n3, warn_status = self.predict_cic(
-                self.model, return_number_densities=True,
-                warn_p_over_1="return_warning")
+            if self.use_halotools:
+                cic, n2 = self.predict_cic_halotools(
+                    self.model, return_number_density=True)
+                n3 = n2
+            else:
+                cic, n2, n3, warn_status = self.predict_cic(
+                    self.model, return_number_densities=True,
+                    warn_p_over_1="return_warning")
         else:
             # No calculations necessary for kmax = 0
-            cic, n2, n3, warn_status = [], None, None, {}
+            cic, n2, n3 = [], None, None
 
+        # Concatenate observables into array and blobs into dictionary
         self.blob.append({"param_dict": param_dict,
                           "n": n, "n2": n2, "n3": n3,
                           "wp": wp, "cic": cic, **warn_status})
@@ -465,6 +478,10 @@ if __name__ == "__main__":
         help="GalaxyTabulator parameter"
     )
     parser.add_argument(
+        "--sqiomw", action="store_true",
+        help="GalaxyTabulator parameter: sat_quant_instead_of_max_weight"
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true"
     )
     parser.add_argument(
@@ -488,8 +505,8 @@ if __name__ == "__main__":
         help="Use NumPy instead of JAX (slower, but it never seg faults)"
     )
     parser.add_argument(
-        "--sqiomw", action="store_true",
-        help="sat_quant instead of max_weight (CICTabulator parameter)"
+        "--use-halotools", action="store_true",
+        help="Use halotools to predict CiC (inefficient for MCMC sampling)"
     )
     parser.add_argument(
         "--use-default-halotools-catalogs", action="store_true"
