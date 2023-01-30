@@ -70,6 +70,7 @@ class ParamSampler:
         self.max_weight = kwargs["max_weight"]
         self.seed = kwargs["seed"]
         self.sqiomw = kwargs["sqiomw"]
+        self.no_assembias = kwargs.get("no_assembias", False)
         self.start_without_assembias = kwargs["start_without_assembias"]
         self.tabulate_at_starting_params = kwargs[
             "tabulate_at_starting_params"]
@@ -92,7 +93,6 @@ class ParamSampler:
         self.magthresh = self.obs["abs_mr_max"].tolist()
 
         self.starting_params = {}
-        self.gt_params = {}
         self.starting_bounds = None
         self.emcee_init_params = None
         self.make_halocat()
@@ -201,25 +201,23 @@ class ParamSampler:
         magthresh = self.magthresh
 
         self.starting_params = param_config.kuan_params[magthresh].copy()
-        self.gt_params = self.starting_params.copy()
+        gt_params = self.starting_params.copy()
 
-        self.gt_params["mean_occupation_centrals_assembias_param1"] = 0
-        self.gt_params["mean_occupation_satellites_assembias_param1"] = 0
-        for name in ["logMmin", "logM1", "logM0"]:
-            self.gt_params[name] -= param_config.kuan_err_low[magthresh][name]
-        for name in ["sigma_logM"]:
-            self.gt_params[name] += param_config.kuan_err_high[magthresh][name]
+        gt_params["mean_occupation_centrals_assembias_param1"] = 0
+        gt_params["mean_occupation_satellites_assembias_param1"] = 0
+        if not self.tabulate_at_starting_params:
+            for name in ["logMmin", "logM1", "logM0"]:
+                gt_params[name] -= param_config.kuan_err_low[magthresh][name]
+            for name in ["sigma_logM"]:
+                gt_params[name] += param_config.kuan_err_high[magthresh][name]
 
         err_low = param_config.kuan_err_low[magthresh].copy()
         err_high = param_config.kuan_err_high[magthresh].copy()
-        if self.start_without_assembias:
+        if self.start_without_assembias or self.no_assembias:
             for galtype in ("centrals", "satellites"):
                 name = f"mean_occupation_{galtype}_assembias_param1"
                 self.starting_params[name] = 0
                 err_low[name] = err_high[name] = 0.5
-
-        if self.tabulate_at_starting_params:
-            self.gt_params.update(self.starting_params)
 
         model = htem.HodModelFactory(
             centrals_occupation=htem.AssembiasZheng07Cens(
@@ -229,8 +227,12 @@ class ParamSampler:
             centrals_profile=htem.TrivialPhaseSpace(redshift=redshift),
             satellites_profile=htem.NFWPhaseSpace(redshift=redshift)
         )
-        model.param_dict.update(self.gt_params)
+        model.param_dict.update(gt_params)
 
+        if self.no_assembias:
+            for galtype in ("centrals", "satellites"):
+                name = f"mean_occupation_{galtype}_assembias_param1"
+                del self.starting_params[name]
         self.starting_params = convert_params_model_to_sampler(
             self.starting_params)
         err_low["logM0_quant"] = err_low["logM0"]
@@ -270,18 +272,18 @@ class ParamSampler:
             cylinder_half_length=self.cylinder_half_length,
             k_vals=kvals, bin_edges=self.cic_edges, analytic_moments=True)
 
-    @staticmethod
-    def make_prior():
+    def make_prior(self):
         prior = nautilus.Prior()
         prior.add_parameter("logMmin", dist=(9, 16))
         prior.add_parameter("sigma_logM", dist=(1e-5, 5))
         prior.add_parameter("logM1", dist=(10, 16))
         prior.add_parameter("logM0_quant", dist=(0, 1))
         prior.add_parameter("alpha", dist=(1e-5, 5))
-        prior.add_parameter(
-            "mean_occupation_centrals_assembias_param1", dist=(-1, 1))
-        prior.add_parameter(
-            "mean_occupation_satellites_assembias_param1", dist=(-1, 1))
+        if not self.no_assembias:
+            prior.add_parameter(
+                "mean_occupation_centrals_assembias_param1", dist=(-1, 1))
+            prior.add_parameter(
+                "mean_occupation_satellites_assembias_param1", dist=(-1, 1))
         return prior
 
     def make_likelihood_dist(self):
@@ -483,6 +485,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true"
+    )
+    parser.add_argument(
+        "--no-assembias", action="store_true",
+        help="Always set Acen=Asat=0"
     )
     parser.add_argument(
         "--start-without-assembias", action="store_true",
