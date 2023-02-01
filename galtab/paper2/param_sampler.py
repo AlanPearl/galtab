@@ -227,6 +227,8 @@ class ParamSampler:
             centrals_profile=htem.TrivialPhaseSpace(redshift=redshift),
             satellites_profile=htem.NFWPhaseSpace(redshift=redshift)
         )
+        # Initialize model parameters - used by galtab as fiducial model
+        # Assembias parameters should always be zero here
         model.param_dict.update(gt_params)
 
         if self.no_assembias:
