@@ -135,7 +135,7 @@ class ParamSampler:
             # TODO: Why doesn't this work?
             # self.parameter_samples, self.log_weights, \
             #     self.log_likelihoods = sampler.posterior()
-            return self.parameter_samples
+            # return self.parameter_samples
 
     def save(self, filename):
         self.obs = self.cosmo = self.model = self.halocat = None
@@ -410,22 +410,19 @@ class ParamSampler:
 
 
 def convert_params_sampler_to_model(param_dict):
-    param_dict = param_dict.copy()
-    # Convert logM0_quant to logM0 for halotools model
     logm0_range = param_dict["logM1"] - (logm0_min := param_dict["logMmin"])
-    param_dict["logM0"] = logm0_min + param_dict["logM0_quant"] * logm0_range
-    del param_dict["logM0_quant"]
-    return param_dict
+    logm0 = logm0_min + param_dict["logM0_quant"] * logm0_range
+    return {"logM0" if name == "logM0_quant" else name:
+            logm0 if name == "logM0_quant" else param_dict[name]
+            for name in param_dict}
 
 
 def convert_params_model_to_sampler(param_dict):
-    param_dict = param_dict.copy()
-    # Convert logM0 to logM0_quant for MCMC sampler
     logm0_range = param_dict["logM1"] - (logm0_min := param_dict["logMmin"])
-    param_dict["logM0_quant"] = (param_dict["logM0"] - logm0_min) / logm0_range
-    del param_dict["logM0"]
-    return param_dict
-
+    logm0_quant = (param_dict["logM0"] - logm0_min) / logm0_range
+    return {"logM0_quant" if name == "logM0" else name:
+            logm0_quant if name == "logM0" else param_dict[name]
+            for name in param_dict}
 
 if __name__ == "__main__":
     import jax

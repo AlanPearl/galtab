@@ -16,6 +16,8 @@ from .param_config import cosmo, proj_search_radius, cylinder_half_length, \
 
 
 class ObservableCalculator:
+    rands_per_sqdeg = 2500.0
+
     def __init__(self, **kwargs):
         # Files and performance arguments
         self.data_dir = pathlib.Path(kwargs["data_dir"])
@@ -24,6 +26,7 @@ class ObservableCalculator:
         self.wp_rand_frac = kwargs["wp_rand_frac"]
         self.verbose = kwargs["verbose"]
         self.first_n = kwargs["first_n"]
+        self.apply_pip_weights_n = not kwargs["dont_apply_pip_weights"]
         self.apply_pip_weights_wp = not kwargs["dont_apply_pip_weights"]
         self.apply_pip_weights_cic = not kwargs["dont_apply_pip_weights"]
         # Cosmology, sample, and metric parameters
@@ -42,6 +45,9 @@ class ObservableCalculator:
         self.proj_search_radius = kwargs["proj_search_radius"]
         self.cylinder_half_length = kwargs["cylinder_half_length"]
         self.effective_area_sqdeg = kwargs["effective_area_sqdeg"]
+        self.cyl_completeness_cut = kwargs.get("cyl_completeness_cut", 0.9)
+        if self.cyl_completeness_cut < 0:
+            self.cyl_completeness_cut = None
         self.num_rand_files = None
 
         # Load the data, prepare it, and calculate masks
@@ -51,9 +57,11 @@ class ObservableCalculator:
             self.nrand_per_region = self.load_data()
 
         self.bitmasks = self.fastphot["bitweights"]
+        self.weights = self.fastphot["weights"]
         self.numjack = len(self.region_masks)
         self.data_rdx, self.rands_rdx = self.make_rdx_arrays()
-        self.randcyl_density, self.randcic_cut = self.calc_randcic_cut()
+        self.randcyl_density, self.randcic_cut, self.cyl_completeness \
+            = self.calc_randcic_cut()
         self.randcic_mask = self.randcyl_density >= self.randcic_cut
         self.effective_area_sqdeg, self.effective_volume, \
             self.average_cylinder_completeness = self.calc_area_and_completeness()
@@ -159,21 +167,24 @@ class ObservableCalculator:
             self.proj_search_radius, self.cylinder_half_length,
             self.data_rdx[:, 2])
         randcyl_density = self.randcyl / (np.pi * angles ** 2)
+        cyl_completeness = randcyl_density /self.num_rand_files / self.rands_per_sqdeg
         model = RandDensityModelCut(randcyl_density, self.purt_factor)
-        randcic_cut = model.optimal_cut()
+        if self.cyl_completeness_cut is None:
+            randcic_cut = model.optimal_cut()
+        else:
+            randcic_cut = self.cyl_completeness_cut * self.num_rand_files * self.rands_per_sqdeg
         if self.verbose:
-            print("Optimal rand density cut:", randcic_cut)
-        return randcyl_density, randcic_cut
+            print("Rand completeness cut:", randcic_cut / self.num_rand_files / self.rands_per_sqdeg)
+        return randcyl_density, randcic_cut, cyl_completeness
 
     def calc_area_and_completeness(self):
-        rands_per_sqdeg = 2500.0
         effective_area_sqdeg = self.effective_area_sqdeg
         if effective_area_sqdeg is None:
             num_rands_per_file = len(self.rands_rdx) / self.num_rand_files
-            effective_area_sqdeg = num_rands_per_file / rands_per_sqdeg
+            effective_area_sqdeg = num_rands_per_file / self.rands_per_sqdeg
         cut = self.randcic_mask & self.mask_z
         average_completeness = (self.randcyl_density[cut].mean() /
-                                self.num_rand_files / rands_per_sqdeg)
+                                self.num_rand_files / self.rands_per_sqdeg)
         if self.verbose:
             print("Effective area =", effective_area_sqdeg, "sq deg")
             print("Average cylinder completeness =", average_completeness)
@@ -214,8 +225,12 @@ class ObservableCalculator:
     def jack_n(self, njack):
         jack_vol_factor = (1 - self.nrand_per_region[njack] /
                            np.sum(self.nrand_per_region))
-        n_sample = np.sum(self.mask_thresh & self.mask_z &
-                          ~self.region_masks[njack])
+        sample_cut = (self.mask_thresh & self.mask_z &
+                      ~self.region_masks[njack])
+        if self.apply_pip_weights_n:
+            n_sample = np.sum(self.weights[sample_cut])
+        else:
+            n_sample = np.sum(sample_cut)
         return n_sample / self.effective_volume / jack_vol_factor
 
     def bin_raw_cic_counts(self, cic, indices, sample1_cut, sample2_cut):
@@ -237,6 +252,7 @@ class ObservableCalculator:
                 icp_weights = (bitsum[i] + 1) / (pair_bitsums + 1)
                 counts.append(icp_weights.sum())
             cic = np.array(counts) - 1  # <-- remove self-counting indices
+        cic = cic / self.cyl_completeness[sample1_cut]
 
         # Assign fuzzy weights to nearest integers, then bin with cic_edges
         # =================================================================
@@ -408,6 +424,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--purity-factor", type=float, default=1.0, metavar="X",
         help="Increase this for a more pure, but less complete, sample"
+    )
+    parser.add_argument(
+        "--cyl-completeness-cut", type=float, default=0.9, metavar="X",
+        help="Spatial completeness fraction cut (-1 to find optimal value)"
     )
     parser.add_argument(
         "--effective-area-sqdeg", type=float, default=None, metavar="X",

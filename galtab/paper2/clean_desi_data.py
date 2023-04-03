@@ -84,6 +84,7 @@ def clean_data():
     unsigned_dtype = clustering_cat["BITWEIGHTS"].dtype.descr[0][1]
     unsigned_dtype = unsigned_dtype.replace("i", "u")
     bitweights = clustering_cat["BITWEIGHTS"].astype(unsigned_dtype)
+    weights = clustering_cat["WEIGHT"]
 
     # Put all data into a single catalog
     # ==================================
@@ -91,13 +92,15 @@ def clean_data():
                                       "abs_rmag_0p1_evolved",
                                       "abs_rmag_0p1_kuan",
                                       "logmass",
-                                      "bitweights"]
+                                      "bitweights",
+                                      "weights"]
     values = [meta[name] for name in meta.dtype.names] + \
              [abs_rmag_0p1,
               abs_rmag_0p1_evolved,
               abs_rmag_0p1_kuan,
               biprateep_masses["logmass"],
-              bitweights]
+              bitweights,
+              weights]
     dtypes = [value.dtype.descr[0][1] for value in values]
     subshapes = [value.shape[1:] for value in values]
     # names[names.index("RA")] = "TARGET_RA"
