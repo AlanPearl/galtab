@@ -20,13 +20,14 @@ def clean_data():
     clustering_cat = np.concatenate([clustering_cat_n, clustering_cat_s])
 
     # Remove bad data
+    # JK, all necessary cuts are applied to the clustering catalogs
+    # and this cut would throw out more data than we want
     # ===============
-    # ZWARN cut is unnecessary since we merge with clustering_cat
-    meta_cut = (  # (meta["ZWARN"] == 0) &
-                (meta["Z"] > 0) &
-                (meta["SPECTYPE"] == "GALAXY") & (meta["DELTACHI2"] > 25))
-    meta = meta[meta_cut]
-    fastphot = fastphot[meta_cut]
+    # meta_cut = (  # (meta["ZWARN"] == 0) &
+    #             (meta["Z"] > 0) &
+    #             (meta["SPECTYPE"] == "GALAXY") & (meta["DELTACHI2"] > 25))
+    # meta = meta[meta_cut]
+    # fastphot = fastphot[meta_cut]
 
     # Remove BGS_FAINT (keep BGS_BRIGHT)
     # ==================================
