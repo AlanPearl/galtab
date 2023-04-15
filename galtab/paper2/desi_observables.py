@@ -46,6 +46,7 @@ class ObservableCalculator:
         self.cylinder_half_length = kwargs["cylinder_half_length"]
         self.effective_area_sqdeg = kwargs["effective_area_sqdeg"]
         self.cyl_completeness_cut = kwargs.get("cyl_completeness_cut", 0.9)
+        self.puff_cov = kwargs.get("puff_cov", False)
         if self.cyl_completeness_cut < 0:
             self.cyl_completeness_cut = None
         self.num_rand_files = None
@@ -106,6 +107,9 @@ class ObservableCalculator:
         obs_mean = np.mean(obs_jacks, axis=0)
         obs_cov = (self.numjack - 1)**2 / self.numjack * np.cov(
             obs_jacks, rowvar=False)
+
+        if self.puff_cov:
+            obs_cov = covpuff(obs_cov, num_samples=self.numjack)
         return obs_mean, obs_cov
 
     def load_data(self):
@@ -340,6 +344,27 @@ class RandDensityModelCut:
         good_hist = self.model_pdf_norm_component(self.bin_cens, truth, std, true_mag)
         return good_hist[self.bin_cens >= x].sum() / good_hist.sum()
 
+def covpuff(cov_matrix, num_samples):
+    """
+    Slightly increase the eigenvalues of the covariance matrix that are only zero
+    because it was calculated with equal or fewer samples than its dimensionality
+    """
+    cov_matrix = np.asarray(cov_matrix)
+    assert cov_matrix.ndim == 2
+    assert cov_matrix.shape[0] == cov_matrix.shape[1]
+    dim = cov_matrix.shape[0]
+    if dim < num_samples:
+        return cov_matrix
+
+    # Perform eigendecomposition on the correlation matrix
+    lam, p = scipy.linalg.eigh(cov_matrix)
+
+    # Perform 'puffing': increase the eigenvalues that are incorrectly zero
+    min_eigval = np.sort(lam)[dim - num_samples + 1]
+    lam[lam < min_eigval] = min_eigval
+
+    # Transform back to original basis to obtain 'puffed' cov matrix
+    return p @ np.diag(lam) @ p.T
 
 class ArrayFloats(argparse.Action):
     # noinspection PyShadowingNames
@@ -362,8 +387,7 @@ if __name__ == "__main__":
         help="Directory containing the data (fastphot.npy file)")
     parser.add_argument(
         "--dont-apply-pip-weights", action="store_true",
-        help="Don't use PIP weighting for wp and CiC"
-    )
+        help="Don't use PIP weighting for wp and CiC")
     parser.add_argument(
         "--apply-pip-weights", action="store_true",
         help="Ignored. Use --dont-apply-pip-weights if necessary.")
@@ -413,8 +437,7 @@ if __name__ == "__main__":
         help="Bin edges in Ncic for CiC", metavar="X0,X1,...")
     parser.add_argument(
         "--cic-kmax", type=int, default=None, metavar="K",
-        help="Calculate moments up to kmax (ignore cic-edges if supplied)"
-    )
+        help="Calculate moments up to kmax (ignore cic-edges if supplied)")
     parser.add_argument(
         "--proj-search-radius", type=float, default=proj_search_radius,
         help="Cylinder radius [Mpc/h] for CiC", metavar="X")
@@ -423,15 +446,16 @@ if __name__ == "__main__":
         help="Helf length of cylinder [Mpc/h] for CiC", metavar="X")
     parser.add_argument(
         "--purity-factor", type=float, default=1.0, metavar="X",
-        help="Increase this for a more pure, but less complete, sample"
-    )
+        help="Increase this for a more pure, but less complete, sample")
     parser.add_argument(
         "--cyl-completeness-cut", type=float, default=0.9, metavar="X",
-        help="Spatial completeness fraction cut (-1 to find optimal value)"
-    )
+        help="Spatial completeness fraction cut (-1 to find optimal value)")
     parser.add_argument(
         "--effective-area-sqdeg", type=float, default=None, metavar="X",
         help="Effective area in sq deg (calculated if not supplied)")
+    parser.add_argument(
+        "--puff-cov", action="store_true",
+        help="Puff up covariance matrices to full rank if Nobs >= Njack")
 
     a = parser.parse_args()
     output_file = a.__dict__.pop("output")
