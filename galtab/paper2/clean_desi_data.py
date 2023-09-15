@@ -65,6 +65,7 @@ def clean_data():
     # ==============================================================
     # No need to subtract KCORR_SDSS_R -- it's already k-corrected to z=0.1
     # Store M_R - 5log(h) (i.e. h=1, but FastSpecFit used h=0.7)
+    # WARNING: As of ~Feb 2023, newer FastSpecFit catalogs might already use h=1
     abs_rmag_0p1 = fastphot["ABSMAG_SDSS_R"] - 5 * np.log10(0.7)
 
     # New column using passive evolution to z=0.1
