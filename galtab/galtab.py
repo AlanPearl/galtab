@@ -1,6 +1,8 @@
 from copy import copy
 import pickle
 import numpy as np
+import jax
+import jax.numpy as jnp
 import pandas as pd
 
 # from astropy import cosmology
@@ -9,7 +11,7 @@ import halotools.mock_observables as htmo
 import halotools.sim_manager as htsm
 import halotools.sim_manager.sim_defaults
 
-from . import galaxy_tabulator as gt
+from . import _galaxy_tabulator as gt
 from . import moments
 
 
@@ -55,7 +57,23 @@ class GalaxyTabulator:
 
         Examples
         --------
-        TODO: Add example usage of galtab
+        Choose HOD model and load halos
+
+        >>> hod = halotools.empirical_models.PrebuiltHodModelFactory("zheng07")
+        >>> halocat = halotools.sim_manager.CachedHaloCatalog(simname="bolplanck")
+
+        Instantiate the tabulators
+
+        >>> gtab = GalaxyTabulator(halocat, hod)
+        >>> cictab = CICTabulator(
+        ...     gtab, proj_search_radius=2.0,
+        ...     cylinder_half_length=10.0, bin_edges=np.arange(-0.5, 16))
+
+        Update HOD parameters to your liking and perform CiC prediction
+
+        >>> hod.param_dict.update({})
+        >>> cictab.predict(hod)
+
         """
         self.halocat = copy(halocat)
         self.fiducial_model = copy(fiducial_model)
@@ -72,15 +90,17 @@ class GalaxyTabulator:
         self.cosmo = cosmo
         if cosmo is None:
             if hasattr(halocat, "cosmology"):
-                self.cosmo = halocat.cosmology if hasattr(halocat, "cosmology") else None
+                self.cosmo = halocat.cosmology if hasattr(
+                    halocat, "cosmology") else None
             else:
                 raise ValueError("No cosmology specified")
-        self.cosmo = halocat.cosmology if cosmo is None and hasattr(halocat, "cosmology") else cosmo
+        self.cosmo = halocat.cosmology if cosmo is None and hasattr(
+            halocat, "cosmology") else cosmo
         self.predictor = None
         self.weights = None
 
-        # Populate_mock is my lazy, but fool-proof way of making
-        # sure the halo_table doesn't include satellite halos
+        # Populate_mock is my lazy way of making sure the halo_table
+        # doesn't include subhalos if the model doesn't need them
         fiducial_model.populate_mock(
             halocat, seed=seed,
             Num_ptcl_requirement=self.num_ptcl_requirement)
@@ -91,7 +111,7 @@ class GalaxyTabulator:
         self.halo_table = self._placeholder_model.mock.halo_table
         self.halo_inds = self.tabulate_halo_inds()
 
-        # Unassign the halotools models to preserve pickle-ability :(
+        # Unassign the halotools models to preserve pickle-ability
         self.fiducial_model = None
         self._placeholder_model = None
 
@@ -102,8 +122,6 @@ class GalaxyTabulator:
         self.weights = gt.calc_weights(
             self.halo_table, self.galaxies, self.halo_inds,
             model) * self.sample_fraction
-        # TODO: Could be more efficient to just throw out a fraction
-        # TODO: of the tabulated galaxy sample at the start
         return self.weights
 
     def tabulate_cic(self, **kwargs):
@@ -190,9 +208,11 @@ class CICTabulator:
         self.sample1_inds = slice(None)
         self.sample2_inds = slice(None)
         if sample1_selector is not None:
-            self.sample1_inds = np.where(sample1_selector(galtabulator.galaxies))[0]
+            self.sample1_inds = np.where(
+                sample1_selector(galtabulator.galaxies))[0]
         if sample2_selector is not None:
-            self.sample2_inds = np.where(sample2_selector(galtabulator.galaxies))[0]
+            self.sample2_inds = np.where(
+                sample2_selector(galtabulator.galaxies))[0]
         self.sample1 = galtabulator.galaxies[self.sample1_inds]
         self.sample2 = galtabulator.galaxies[self.sample2_inds]
 
@@ -238,7 +258,7 @@ class CICTabulator:
             self.indices.sort(order="i1")
 
     def predict(self, model, return_number_densities=False, n_mc=None,
-                reseed_mc=False, warn_p_over_1=True, use_numpy=False):
+                reseed_mc=False, warn_p_over_1=True):
         """
         Perform tabulation-accelerated prediction
 
@@ -255,10 +275,6 @@ class CICTabulator:
         warn_p_over_1 : bool | str [Optional]
             If true (default), print a warning if any placeholder weights > 1
             If string starting with "return", return warn_status, don't print
-        use_numpy : bool [Optional]
-            Use NumPy instead of JAX's add.at function. It is slower, but
-            JAX sometimes seg-faults with no error message (I think this
-            only happens if there are insufficient computing resources?)
 
         Returns
         -------
@@ -274,8 +290,7 @@ class CICTabulator:
         """
         result = self.calc_cic(
             model, return_number_densities=return_number_densities,
-            n_mc=n_mc, reseed_mc=reseed_mc, warn_p_over_1=warn_p_over_1,
-            use_numpy=use_numpy)
+            n_mc=n_mc, reseed_mc=reseed_mc, warn_p_over_1=warn_p_over_1)
         n1 = n2 = None
         if return_number_densities:
             cic, n1, n2, warn_status = result
@@ -286,11 +301,11 @@ class CICTabulator:
             pass
         elif self.k_vals is not None:
             cic = moments.moments_from_samples(
-                np.arange(len(cic)), self.k_vals, weights=cic)
+                jnp.arange(len(cic)), self.k_vals, weights=cic)
         elif self.bin_edges is not None:
-            hist = np.histogram(
-                np.arange(len(cic)), self.bin_edges, weights=cic)[0]
-            cic = hist / hist.sum() / np.diff(self.bin_edges)
+            hist = jnp.histogram(
+                jnp.arange(len(cic)), self.bin_edges, weights=cic)[0]
+            cic = hist / hist.sum() / jnp.diff(self.bin_edges)
 
         return_warn_status = (hasattr(warn_p_over_1, "lower") and
                               warn_p_over_1.lower().startswith("return"))
@@ -305,7 +320,7 @@ class CICTabulator:
             return cic
 
     def calc_cic(self, model, return_number_densities=False, n_mc=None,
-                 reseed_mc=False, warn_p_over_1=True, use_numpy=False):
+                 reseed_mc=False, warn_p_over_1=True):
         if reseed_mc:
             self.seed_monte_carlo()
         if n_mc is None:
@@ -316,12 +331,13 @@ class CICTabulator:
         n1 = self.n1
         indices = self.indices
         weights = self.galtabulator.calc_weights(model)
-        previous_ints = np.ceil(weights).astype(int) - 1
-        previous_ints[previous_ints < 0] = 0
+        previous_ints = jnp.ceil(weights) - 1
+        # previous_ints[previous_ints < 0] = 0
+        previous_ints = jnp.where(previous_ints < 0, 0, previous_ints)
 
         warn_raised = False
         n_bad_weights, mean_bad_weight = None, None
-        if warn_p_over_1 and np.any(previous_ints):
+        if warn_p_over_1 and jnp.any(previous_ints):
             warn_raised = True
             bad_weights = weights[previous_ints != 0]
             n_bad_weights = len(bad_weights)
@@ -330,8 +346,9 @@ class CICTabulator:
             ).startswith("return"):
                 pass
             else:
-                print(f"WARNING: There are {n_bad_weights} placeholders "
-                      f"with weight>1, averaging: {mean_bad_weight}")
+                jax.debug.print(
+                    "WARNING: There are {x} placeholders with weight>1, averaging: {y}",
+                    x=n_bad_weights, y=mean_bad_weight)
 
         if self.analytic_moments and self.kmax is not None:
             # It was spending ~99% of computational time in np.add.at
@@ -342,25 +359,21 @@ class CICTabulator:
                 bc = moments.bernoulli_cumulant(weights, k)
 
                 # Sum of Bernoulli cumulants --> Poisson Binomial cumulants
-                if use_numpy:
-                    pc = moments.numpy_sum_at(
-                        bc, indices["i2"], indices["i1"], len_out=n1)
-                else:
-                    pc = moments.jit_sum_at(
-                        bc, indices["i2"], indices["i1"], len_out=n1,
-                        ind_out_is_sorted=self.sort_tabulated_indices)
-                    # replace bc with bc[self.sample2_inds] ?
-                pb_cumulants.append(np.asarray(pc))
+                pc = moments.jit_sum_at(
+                    bc, indices["i2"], indices["i1"], len_out=n1,
+                    ind_out_is_sorted=self.sort_tabulated_indices)
+                # TODO: replace bc with bc[self.sample2_inds] ???
+                pb_cumulants.append(pc)
 
             pb_raw_moments = moments.raw_moments_from_cumulants(pb_cumulants)
-            avg_raw_moments = np.average(
+            avg_raw_moments = jnp.average(
                 pb_raw_moments, weights=weights, axis=1)
             cic = moments.standardized_moments_from_raw_moments(
                 avg_raw_moments)
-            cic = np.array([cic[k-1] if k > 0 else 1 for k in self.k_vals])
+            cic = jnp.array([cic[k-1] if k > 0 else 1 for k in self.k_vals])
 
         else:
-            next_int_probs = weights - previous_ints.astype(np.float32)
+            next_int_probs = weights - previous_ints.astype(jnp.float32)
             mc_num_arrays = previous_ints[:, None] + (mc_rands <
                                                       next_int_probs[:, None])
 
@@ -370,26 +383,26 @@ class CICTabulator:
                 ind_out_is_sorted=self.sort_tabulated_indices)
             # replace mc_num_arrays with mc_num_arrays[self.sample2_inds] ?
 
-            numbins = np.max(ncic_arrays) + 1
+            numbins = int(jnp.max(ncic_arrays) + 1)
             if numbins < self.max_ncic:
-                ncic_arrays1 = ncic_arrays + (numbins * np.arange(n_mc))
+                ncic_arrays1 = ncic_arrays.astype(int) + (numbins * jnp.arange(n_mc))
 
-                ncic_hists = np.bincount(
-                    ncic_arrays1.ravel(), weights=np.repeat(weights, n_mc),
+                ncic_hists = jnp.bincount(
+                    ncic_arrays1.ravel(), weights=jnp.repeat(weights, n_mc),
                     minlength=numbins * n_mc).reshape(n_mc, -1)
-                p_ncic_configs = ncic_hists / np.sum(ncic_hists,
-                                                     axis=1)[:, None]
-                cic = np.nanmean(p_ncic_configs, axis=0)
+                p_ncic_configs = ncic_hists / jnp.sum(ncic_hists,
+                                                      axis=1)[:, None]
+                cic = jnp.nanmean(p_ncic_configs, axis=0)
             else:
-                cic = np.array([np.nan])
+                cic = jnp.array([jnp.nan])
 
         warn_status = {"warn_raised": warn_raised,
                        "n_bad_weights": n_bad_weights,
                        "mean_bad_weight": mean_bad_weight}
         if return_number_densities:
-            vol = np.product(self.galtabulator.halocat.Lbox)
+            vol = jnp.product(self.galtabulator.halocat.Lbox)
             weights1 = weights  # [self.sample1_inds]
-            n_density1 = np.sum(weights1) / vol
+            n_density1 = jnp.sum(weights1) / vol
             # weights2 = weights[self.sample2_inds]
             n_density2 = n_density1  # np.sum(weights2) / vol
 

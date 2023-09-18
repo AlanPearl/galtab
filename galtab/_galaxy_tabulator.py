@@ -2,7 +2,9 @@ import types
 from copy import copy
 
 import numpy as np
+import jax.numpy as jnp
 import scipy.stats
+import pandas as pd
 
 import halotools.mock_observables as htmo
 
@@ -77,7 +79,16 @@ def make_placeholder_model(galtab):
 
         # Repopulate the mock, this time without the useless halos
         # ========================================================
-        trimmed_halocat._halo_table = trimmed_halotable
+        old_ids = pd.DataFrame(
+            {"old_index": np.arange(len(galtab.halocat.halo_table))},
+            index=galtab.halocat.halo_table["halo_id"])
+        new_ids = pd.DataFrame(
+            {"new_index": np.arange(len(trimmed_halotable))},
+            index=trimmed_halotable["halo_id"])
+        useful_indices = pd.merge(
+            old_ids, new_ids, left_index=True, right_index=True)["old_index"].values
+
+        trimmed_halocat._halo_table = galtab.halocat.halo_table[useful_indices]
         ph_model.populate_mock(trimmed_halocat, **kwargs)
         galaxies = ph_model.mock.galaxy_table
 
@@ -98,10 +109,11 @@ def make_placeholder_model(galtab):
     return galaxies, ph_model, trimmed_halocat
 
 
+# TODO: jit compile `calc_weights()` if `model` is JAX compatible
 # noinspection PyProtectedMember
 def calc_weights(halos, galaxies, halo_inds, model):
     # TODO: Speed this up with num_ptcl_requirement???
-    weights = np.full(len(galaxies), np.nan, dtype=np.float32)
+    weights = jnp.full(len(galaxies), jnp.nan, dtype=jnp.float32)
 
     # Access the occupation component models
     names = [x for x in model._input_model_dictionary
@@ -111,35 +123,13 @@ def calc_weights(halos, galaxies, halo_inds, model):
 
     for gal_type, method in zip(gal_types, methods):
         mask = galaxies["gal_type"] == gal_type
-        mean_occ = method(table=halos)[halo_inds][mask]
-        num_placeholders = galaxies["halo_num_" + gal_type][mask]
-        weights[mask] = mean_occ / num_placeholders
+        mean_occ = method(table=halos)[halo_inds]#[mask]
+        num_placeholders = galaxies["halo_num_" + gal_type]#[mask]
+        # weights[mask] = mean_occ / num_placeholders
+        weights = jnp.where(mask, mean_occ / num_placeholders, weights)
+
 
     return weights
-
-
-# Old version made a histogram of centrals as function of prim_haloprop
-# The current version makes the histogram as function of mean_occupation
-# ======================================================================
-# def get_min_prob(galtab, occ_model, min_quantile):
-#     haloprop = galtab.halo_table[occ_model.prim_haloprop_key]
-#     prop_bins = np.geomspace(haloprop.min(), haloprop.max(), 100)
-#     prop_hist = np.histogram(haloprop, prop_bins)[0]
-#     prop_cens = np.sqrt(prop_bins[:-1] * prop_bins[1:])
-#
-#     meanocc = np.mean(
-#         [occ_model.mean_occupation(prim_haloprop=prop_cens, sec_haloprop_percentile=0),
-#          occ_model.mean_occupation(prim_haloprop=prop_cens, sec_haloprop_percentile=1)],
-#         axis=0)
-#     gal_hist = meanocc * prop_hist
-#     gal_cumsum = np.cumsum(gal_hist)
-#     gal_cdf = np.concatenate([[0.0], gal_cumsum / gal_cumsum[-1]])
-#
-#     min_prop = np.interp(min_quantile, gal_cdf, prop_bins)
-#     min_prob = np.mean(
-#         [occ_model.mean_occupation(prim_haloprop=min_prop, sec_haloprop_percentile=0),
-#          occ_model.mean_occupation(prim_haloprop=min_prop, sec_haloprop_percentile=1)])
-#     return min_prob
 
 
 def get_min_prob(galtab, occ_model, min_quantile, numbins=1000):

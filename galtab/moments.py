@@ -28,10 +28,10 @@ def numpy_sum_at(arr_in, ind_in, ind_out, len_out=None):
 
 def moments_from_samples(samples, k_vals, weights=None):
     kmax = np.max(k_vals)
-    weights = np.ones_like(samples) if weights is None else weights
-    weights = np.array(weights) / np.sum(weights)
-    mu1 = np.sum(samples * weights) if kmax > 0 else np.nan
-    mu2 = (np.sum(weights * (samples - mu1)**2)) ** 0.5 if kmax > 1 else np.nan
+    weights = jnp.ones_like(samples) if weights is None else jnp.asarray(weights)
+    weights = weights / jnp.sum(weights)
+    mu1 = jnp.sum(samples * weights) if kmax > 0 else jnp.nan
+    mu2 = (jnp.sum(weights * (samples - mu1)**2)) ** 0.5 if kmax > 1 else jnp.nan
 
     moments = []
     for k in k_vals:
@@ -40,9 +40,9 @@ def moments_from_samples(samples, k_vals, weights=None):
         elif k == 2:
             moment = mu2
         else:
-            moment = np.sum(weights * (samples - mu1)**k) / mu2**k
+            moment = jnp.sum(weights * (samples - mu1)**k) / mu2**k
         moments.append(moment)
-    return np.array(moments)
+    return jnp.array(moments)
 
 
 def moments_from_binned_pmf(bin_edges, pmf, k_vals):
@@ -70,7 +70,7 @@ def standardized_moments_from_raw_moments(m):
     # Start with the 1st standardized moment (aka the mean - same as raw moment)
     mu = [m[1]]
     for k in range(2, len(m)):
-        mu_k = np.zeros_like(m[1])
+        mu_k = jnp.zeros_like(m[1])
         if not np.ndim(mu_k):
             mu_k = mu_k.tolist()
         # Calculate central moments
@@ -78,24 +78,24 @@ def standardized_moments_from_raw_moments(m):
             mu_k += math.comb(k, i) * pow(-1, k-i) * m[i] * pow(m[1], k-i)
         # Standardized 2nd moment is the standard deviation
         if k == 2:
-            mu_k = np.sqrt(mu_k)
+            mu_k = jnp.sqrt(mu_k)
         # Standardized k(>2)th moment is central moment / kth power of std dev
         else:
             assert k > 2
-            mu_k = mu_k / np.power(mu[1], k)
+            mu_k = mu_k / jnp.power(mu[1], k)
         mu.append(mu_k)
     return mu
 
 
 def raw_moments_from_cumulants(kappa):
     # Prepend the 0th cumulant as NaN
-    kappa = [np.nan, *kappa]
+    kappa = [jnp.nan, *kappa]
     # Start with the 0th raw moment for bookkeeping; remove it before returning
-    m = [np.nan]
+    m = [jnp.nan]
     for n in range(1, len(kappa)):
         m_n = kappa[n]
         if np.ndim(m_n):
-            m_n = np.array(m_n, copy=True)
+            m_n = jnp.array(m_n, copy=True)
         for i in range(1, n):
             m_n += math.comb(n - 1, i - 1) * kappa[i]*m[n-i]
         m.append(m_n)
