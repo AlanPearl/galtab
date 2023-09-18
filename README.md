@@ -26,5 +26,5 @@ conda install -c conda-forge mpi4py
 
 # Installation
 ```
-pip install --upgrade git+https://github.com/AlanPearl/galtab.git
+pip install galtab
 ```

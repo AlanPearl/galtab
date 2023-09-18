@@ -32,7 +32,7 @@ class GalaxyTabulator:
         halocat : htsm.CachedHaloCatalog
             Catalog containing the halos to populate galaxies on top of
         fiducial_model : htem.ModelFactory
-            The model used to calculate the number of placeholder galaxies
+            Used to calculate the number of placeholder galaxies per halo
         n_mc : int (default = 10)
             Number of Monte-Carlo realizations to combine
         min_quant : float (default = 0.001)
@@ -49,7 +49,7 @@ class GalaxyTabulator:
         seed : Optional[int]
             Monte-Carlo realization seeds; also passed to model.populate_mock()
         cosmo : Optional[astropy.Cosmology object]
-            Used for redshift-space distortions; default is Bolshoi-Planck
+            Used for redshift-space distortions; default taken from halocat
         sat_quant_instead_of_max_weight : Optional[bool]
             If true, max_weight is interpretted as 1 - sat_quant, where
             sat_quant specifies the number of placeholder satellites by the
@@ -87,15 +87,13 @@ class GalaxyTabulator:
         else:
             self.num_ptcl_requirement = num_ptcl_requirement
         self.seed = seed
-        self.cosmo = cosmo
         if cosmo is None:
             if hasattr(halocat, "cosmology"):
-                self.cosmo = halocat.cosmology if hasattr(
-                    halocat, "cosmology") else None
+                cosmo = halocat.cosmology
             else:
-                raise ValueError("No cosmology specified")
-        self.cosmo = halocat.cosmology if cosmo is None and hasattr(
-            halocat, "cosmology") else cosmo
+                raise ValueError(
+                    "There is no halocat.cosmology - please specify it manually")
+        self.cosmo = cosmo
         self.predictor = None
         self.weights = None
 
