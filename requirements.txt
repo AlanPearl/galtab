@@ -1,7 +1,8 @@
 numpy
 scipy
-jax
+jax[cpu]
 halotools>=0.7
+h5py
 pandas
 astropy
 tqdm
