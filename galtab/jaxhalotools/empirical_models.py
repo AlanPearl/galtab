@@ -2,11 +2,10 @@ import jax
 import jax.scipy
 from jax import numpy as jnp
 
-from halotools.empirical_models.occupation_models.zheng07_components import *
-from halotools.custom_exceptions import HalotoolsError
+import halotools.empirical_models as htem
 
 
-class JaxZheng07Cens(Zheng07Cens):
+class JaxZheng07Cens(htem.Zheng07Cens):
     def mean_occupation(self, **kwargs):
         # Retrieve the array storing the mass-like variable
         if 'table' in list(kwargs.keys()):
@@ -16,13 +15,13 @@ class JaxZheng07Cens(Zheng07Cens):
         else:
             msg = ("\nYou must pass either a ``table`` or ``prim_haloprop`` argument \n"
                    "to the ``mean_occupation`` function of the ``Zheng07Cens`` class.\n")
-            raise HalotoolsError(msg)
+            raise htem.HalotoolsError(msg)
 
         return zheng07_cenocc(mass, self.param_dict["logMmin"],
                               self.param_dict["sigma_logM"])
 
 
-class JaxZheng07Sats(Zheng07Sats):
+class JaxZheng07Sats(htem.Zheng07Sats):
     def mean_occupation(self, **kwargs):
         if self.modulate_with_cenocc:
             for key, value in list(self.param_dict.items()):
@@ -37,7 +36,7 @@ class JaxZheng07Sats(Zheng07Sats):
         else:
             msg = ("\nYou must pass either a ``table`` or ``prim_haloprop`` argument \n"
                    "to the ``mean_occupation`` function of the ``Zheng07Sats`` class.\n")
-            raise HalotoolsError(msg)
+            raise htem.HalotoolsError(msg)
 
         mean_nsat = zheng07_satocc(mass, self.param_dict["logM0"],
                                    self.param_dict["logM1"], self.param_dict["alpha"])
@@ -62,11 +61,13 @@ def vectorized_cond(pred, true_fun, false_fun, operand, safe_operand_value=0):
     return jnp.where(pred, true_fun(true_op), false_fun(false_op))
 
 
+@jax.jit
 def zheng07_cenocc(mass, logmmin, sigma_logm):
     logm = jnp.log10(mass)
     return 0.5 * (1.0 + jax.scipy.special.erf((logm - logmmin) / sigma_logm))
 
 
+@jax.jit
 def zheng07_satocc(mass, logm0, logm1, alpha):
     m0 = 10. ** logm0
     m1 = 10. ** logm1
@@ -75,13 +76,9 @@ def zheng07_satocc(mass, logm0, logm1, alpha):
     def nonzero_func(x):
         return ((x - m0) / m1) ** alpha
 
-    def zero_func(_x):
+    def zero_func(x):
         return 0
 
     mean_nsat = vectorized_cond(is_nonzero, nonzero_func, zero_func, mass,
                                 safe_operand_value=m0 + m1)
     return mean_nsat
-
-
-zheng07_cenocc = jax.jit(zheng07_cenocc)
-zheng07_satocc = jax.jit(zheng07_satocc)

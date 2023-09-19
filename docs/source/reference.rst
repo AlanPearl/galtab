@@ -34,3 +34,12 @@ API reference
 .. autofunction:: galtab.moments.moments_from_binned_pmf
 
 .. autoclass:: galtab.moments.BernoulliCumulantGenerator
+
+``galtab.jaxhalotools``
+-----------------------
+
+.. autoclass:: galtab.jaxhalotools.JaxZheng07Cens
+
+.. autoclass:: galtab.jaxhalotools.JaxZheng07Sats
+
+.. autofunction:: galtab.jaxhalotools.vectorized_cond

@@ -9,7 +9,6 @@ import pandas as pd
 # import halotools.empirical_models as htem
 import halotools.mock_observables as htmo
 import halotools.sim_manager as htsm
-import halotools.sim_manager.sim_defaults
 
 from . import _galaxy_tabulator as gt
 from . import moments
