@@ -6,6 +6,10 @@
 Welcome to galtab's documentation!
 ==================================
 
+.. This little hack allows for math in TOC titles
+.. math::
+   :nowrap:
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
@@ -19,5 +23,6 @@ Indices and tables
 ==================
 
 * :ref:`genindex`
-* :ref:`modindex`
 * :ref:`search`
+
+.. * :ref:`modindex`

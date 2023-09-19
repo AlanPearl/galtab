@@ -13,11 +13,11 @@ Prerequisites
 Example installation with conda env:
 ++++++++++++++++++++++++++++++++++++
 
-.. code-block:: console
+.. code-block:: bash
 
-    conda create -n py310-galtab python=3.10
-    conda activate py310-galtab
-    conda install -c conda-forge mpi4py  # openmpi=4.1.4=ha1ae619_100
+    conda create -n py310 python=3.10
+    conda activate py310
+    conda install -c conda-forge mpi4py
 
 Optional dependencies for ``galtab.paper2`` subpackage
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
