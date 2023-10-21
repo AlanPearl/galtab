@@ -7,6 +7,7 @@ from astropy import cosmology
 import halotools.empirical_models as htem
 import halotools.sim_manager as htsm
 import halotools.mock_observables as htmo
+from halotools.custom_exceptions import HalotoolsError
 
 import galtab
 
@@ -21,7 +22,7 @@ class JaxZheng07Cens(htem.Zheng07Cens):
         else:
             msg = ("\nYou must pass either a ``table`` or ``prim_haloprop`` argument \n"
                    "to the ``mean_occupation`` function of the ``Zheng07Cens`` class.\n")
-            raise htem.HalotoolsError(msg)
+            raise HalotoolsError(msg)
 
         return zheng07_cenocc(mass, self.param_dict["logMmin"],
                               self.param_dict["sigma_logM"])
@@ -42,7 +43,7 @@ class JaxZheng07Sats(htem.Zheng07Sats):
         else:
             msg = ("\nYou must pass either a ``table`` or ``prim_haloprop`` argument \n"
                    "to the ``mean_occupation`` function of the ``Zheng07Sats`` class.\n")
-            raise htem.HalotoolsError(msg)
+            raise HalotoolsError(msg)
 
         mean_nsat = zheng07_satocc(mass, self.param_dict["logM0"],
                                    self.param_dict["logM1"], self.param_dict["alpha"])
