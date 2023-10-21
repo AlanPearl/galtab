@@ -1,6 +1,6 @@
 numpy
 scipy
-jax[cpu]
+jax
 halotools>=0.8.2
 h5py
 pandas
