@@ -364,7 +364,7 @@ class CICTabulator:
 
             pb_raw_moments = moments.raw_moments_from_cumulants(pb_cumulants)
             avg_raw_moments = jnp.average(
-                pb_raw_moments, weights=weights, axis=1)
+                jnp.array(pb_raw_moments), weights=weights, axis=1)
             cic = moments.standardized_moments_from_raw_moments(
                 avg_raw_moments)
             cic = jnp.array([cic[k-1] if k > 0 else 1 for k in self.k_vals])

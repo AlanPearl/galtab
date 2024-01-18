@@ -77,7 +77,6 @@ class ParamSampler:
 
         self.halocat = kwargs.get("halocat")
         self.cictab = kwargs.get("cictab")
-        self.use_numpy = kwargs.get("use_numpy", False)
         self.use_halotools = kwargs.get("use_halotools", False)
         self.obs = self.load_obs()
         self.cosmo = self.obs["cosmo"].tolist()
@@ -358,7 +357,7 @@ class ParamSampler:
         """
         return self.cictab.predict(
             model, return_number_densities=return_number_densities,
-            n_mc=n_mc, use_numpy=self.use_numpy, warn_p_over_1=warn_p_over_1)
+            n_mc=n_mc, warn_p_over_1=warn_p_over_1)
 
     def predict_wp_halotools(self, model, return_number_density=False,
                              num_threads=1):
