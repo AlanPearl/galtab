@@ -11,12 +11,10 @@ Use JAX-accelerated galaxy tabulation to compute HOD counts-in-cells statistics
 
 # Prerequisites
 - `python>=3.9`
-- `mpi4py` with MPI backend (several implementations available - see https://pypi.org/project/mpi4py)
 ### Example to automatically install prerequisites using a conda environment:
 ```
 conda create -n py39 python=3.9
-conda activate py39
-conda install -c conda-forge mpi4py 
+conda activate py39 
 ```
 <!-- conda install -c conda-forge openmpi=4.1.4=ha1ae619_100  # (no longer needed, automatically installs with mpi4py on conda-forge) -->
 ### Optional dependencies for the [paper2](https://github.com/AlanPearl/galtab/tree/main/galtab/paper2) subpackage
@@ -25,3 +23,5 @@ conda install -c conda-forge mpi4py
 - emcee (`pip install emcee`)
 - nautilus (`pip install nautilus-sampler`)
 - uncertainties (`pip install uncertainties`)
+- mpi4py (`conda install -c conda-forge mpi4py`)
+  - with MPI backend (several implementations available - see https://pypi.org/project/mpi4py)
