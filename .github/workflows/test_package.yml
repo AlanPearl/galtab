@@ -26,4 +26,4 @@ jobs:
         pip install pytest
         pip install pytest-cov
         pip install scipy
-        pytest -v tests/ --cov=exampy/
+        pytest -v --cov=galtab/
