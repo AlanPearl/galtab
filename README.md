@@ -11,9 +11,10 @@ Use JAX-accelerated galaxy tabulation to compute HOD counts-in-cells statistics
 
 # Prerequisites
 - `python>=3.9`
+- `jax`
 ### Example to automatically install prerequisites using a conda environment:
 ```
-conda create -n py39 python=3.9
+conda create -n py39 python=3.9 jax
 conda activate py39 
 ```
 <!-- conda install -c conda-forge openmpi=4.1.4=ha1ae619_100  # (no longer needed, automatically installs with mpi4py on conda-forge) -->
