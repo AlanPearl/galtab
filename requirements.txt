@@ -8,3 +8,4 @@ astropy
 tqdm
 fast3tree
 pathlib
+Pyarrow
