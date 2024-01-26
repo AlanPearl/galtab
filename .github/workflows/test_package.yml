@@ -5,7 +5,7 @@ on:
   schedule:
     # Runs "every Monday & Thursday at 3:05am Central"
     - cron: '5 8 * * 1,4'
-  push:
+  push: null
     # all branches
     # branches:
     #   - main
@@ -45,4 +45,5 @@ jobs:
     - name: Run tests
       shell: bash -l {0}
       run: |
+        export PYTHONWARNINGS=error
         pytest -v --cov=galtab/
