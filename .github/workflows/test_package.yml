@@ -6,8 +6,9 @@ on:
     # Runs "every Monday & Thursday at 3:05am Central"
     - cron: '5 8 * * 1,4'
   push:
-    branches:
-      - main
+    # all branches
+    # branches:
+    #   - main
   pull_request: null
 
 jobs:
@@ -19,19 +20,29 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: conda-incubator/setup-miniconda@v2
       with:
+        activate-environment: test${{ matrix.python-version}}
         python-version: ${{ matrix.python-version }}
+        channels: conda-forge,defaults
+        channel-priority: strict
+        show-channel-urls: true
+        miniforge-version: latest
+        miniforge-variant: Mambaforge
+        use-mamba: true
+
     - name: Install dependencies
       shell: bash -l {0}
       run: |
-        conda install jax
+        mamba install -yq jax 
+        mamba install -yq pip pytest pytest-cov flake8
+
     - name: Install package
       shell: bash -l {0}
       run: |
         pip install -e .
-    - name: Test with pytest
+
+    - name: Run tests
       shell: bash -l {0}
       run: |
-        pip install pytest pytest-cov
         pytest -v --cov=galtab/
