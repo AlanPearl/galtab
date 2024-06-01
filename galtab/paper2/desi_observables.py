@@ -416,7 +416,7 @@ if __name__ == "__main__":
         help="Upper limit on redshift of the sample")
     parser.add_argument(
         "--logmmin", type=float, default=-np.inf, metavar="X",
-        help="Lower limit on log stellar mass of the sample")
+        help="[Deprecated] Lower limit on log stellar mass of the sample")
     parser.add_argument(
         "--abs-mr-max", type=float, default=np.inf, metavar="X",
         help="Upper limit on absolute R-mand magnitude (e.g. -19.5)")

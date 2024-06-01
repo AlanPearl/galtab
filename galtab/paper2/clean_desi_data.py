@@ -14,7 +14,6 @@ import mocksurvey as ms
 def clean_data():
     meta = fits.open(data_dir / fastphot_filename)[2].data
     fastphot = fits.open(data_dir / fastphot_filename)[1].data
-    biprateep_masses = fits.open(data_dir / biprateep_filename)[1].data
     clustering_cat_n = fits.open(data_dir / clustering_cat_n_filename)[1].data
     clustering_cat_s = fits.open(data_dir / clustering_cat_s_filename)[1].data
     clustering_cat = np.concatenate([clustering_cat_n, clustering_cat_s])
@@ -42,23 +41,15 @@ def clean_data():
         {"target_id": meta["TARGETID"].astype(np.int64),
          "meta_ind": np.arange(len(meta))}
     )
-    biprateep_df = pd.DataFrame(
-        {"target_id": biprateep_masses["TARGETID"].astype(np.int64),
-         "biprateep_ind": np.arange(len(biprateep_masses))}
-    )
-    merged_df = pd.merge(meta_df, biprateep_df, on="target_id"
-                         ).drop_duplicates("target_id")
-
     clustering_df = pd.DataFrame(
         {"target_id": clustering_cat["TARGETID"].astype(np.int64),
          "clustering_ind": np.arange(len(clustering_cat))}
     )
-    merged_df = pd.merge(merged_df, clustering_df, on="target_id"
+    merged_df = pd.merge(meta_df, clustering_df, on="target_id"
                          ).drop_duplicates("target_id")
 
     meta = meta[merged_df["meta_ind"].values]
     fastphot = fastphot[merged_df["meta_ind"].values]
-    biprateep_masses = biprateep_masses[merged_df["biprateep_ind"].values]
     clustering_cat = clustering_cat[merged_df["clustering_ind"].values]
 
     # Add only the necessary data from fastphot and biprateep_masses
@@ -93,14 +84,12 @@ def clean_data():
     names = list(meta.dtype.names) + ["abs_rmag_0p1",
                                       "abs_rmag_0p1_evolved",
                                       "abs_rmag_0p1_kuan",
-                                      "logmass",
                                       "bitweights",
                                       "weights"]
     values = [meta[name] for name in meta.dtype.names] + \
              [abs_rmag_0p1,
               abs_rmag_0p1_evolved,
               abs_rmag_0p1_kuan,
-              biprateep_masses["logmass"],
               bitweights,
               weights]
     dtypes = [value.dtype.descr[0][1] for value in values]
@@ -110,7 +99,6 @@ def clean_data():
     meta = ms.util.make_struc_array(names, values, dtypes, subshapes)
 
     del fastphot
-    del biprateep_masses
     del clustering_cat
 
     # Order data by region index (and remove those not in a region)
@@ -183,11 +171,6 @@ if __name__ == "__main__":
         help="Filename of the fastphot catalog"
     )
     parser.add_argument(
-        "--biprateep-mass-cat-filename", type=str,
-        default="stellar_mass_specz_ztile-sv3-bright-cumulative.fits",
-        help="Filename of Biprateep's stellar mass catalog"
-    )
-    parser.add_argument(
         "--clustering-cat-n-filename", type=str,
         default="BGS_BRIGHT_N_clustering.dat.fits",
         help="Filename of the catalog containing fiber assignment bitweights"
@@ -212,7 +195,6 @@ if __name__ == "__main__":
     output_dir = pathlib.Path(a.data_dir) / output_dirname
     out_rand_dir = output_dir / "rands"
     fastphot_filename = a.fastphot_filename
-    biprateep_filename = a.biprateep_mass_cat_filename
     clustering_cat_n_filename = a.clustering_cat_n_filename
     clustering_cat_s_filename = a.clustering_cat_s_filename
 
