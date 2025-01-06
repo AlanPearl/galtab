@@ -143,7 +143,7 @@ class CICTabulator:
     def __init__(self, galtabulator, proj_search_radius,
                  cylinder_half_length, k_vals=None, bin_edges=None,
                  sample1_selector=None, sample2_selector=None,
-                 analytic_moments=False, sort_tabulated_indices=False,
+                 analytic_moments=True, sort_tabulated_indices=False,
                  max_ncic=int(1e5),
                  seed=None, **kwargs):
         """
@@ -382,7 +382,8 @@ class CICTabulator:
 
             numbins = int(jnp.max(ncic_arrays) + 1)
             if numbins < self.max_ncic:
-                ncic_arrays1 = ncic_arrays.astype(int) + (numbins * jnp.arange(n_mc))
+                ncic_arrays1 = ncic_arrays.astype(int) + (
+                    numbins * jnp.arange(n_mc))
 
                 ncic_hists = jnp.bincount(
                     ncic_arrays1.ravel(), weights=jnp.repeat(weights, n_mc),
