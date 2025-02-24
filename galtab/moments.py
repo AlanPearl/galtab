@@ -27,6 +27,25 @@ def numpy_sum_at(arr_in, ind_in, ind_out, len_out=None):
 
 
 def moments_from_samples(samples, k_vals, weights=None):
+    """
+    Calculate up to the kth moment of a given sample.
+    1st moment is the mean, 2nd moment is the standard deviation, and
+    for k=3+ we compute standardized moments, e.g. skewness, kurtosis, etc.
+
+    Parameters
+    ----------
+    samples : array-like
+        Sampled values from which to calculate moments
+    k_vals : list[int]
+        Moments to be calculated
+    weights : array-like, optional
+        Weights for each sample. If None, all samples are equally weighted.
+
+    Returns
+    -------
+    jnp.array
+        Calculated moments
+    """
     kmax = np.max(k_vals)
     weights = jnp.ones_like(samples) if weights is None else jnp.asarray(weights)
     weights = weights / jnp.sum(weights)
