@@ -1,3 +1,6 @@
 nbsphinx
 IPython
+matplotlib
 ipykernel
+jupyter
+ipywidgets
