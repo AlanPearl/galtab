@@ -246,7 +246,8 @@ class CICTabulator:
                                      dtype=np.float64).T
         kwargs["period"] = self.galtabulator.halocat.Lbox
         kwargs["return_indexes"] = True
-        self.indices = htmo.counts_in_cylinders(**kwargs)[1]
+        self.indices = htmo.counts_in_cylinders(**kwargs)[1].astype(
+            [("i1", "<u8"), ("i2", "<u8")])
 
         # Remove self-counting!
         # TODO: Is there a way that allows sample1 and sample2 to differ?
